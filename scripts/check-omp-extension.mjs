@@ -62,6 +62,19 @@ assert.match(notification, /OMP computer use configuration/);
 assert.match(notification, new RegExp(`${os.homedir().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/\\.omp/agent/extensions/omp-computer-use\\.json`));
 assert.match(notification, /\.omp\/computer-use\.json/);
 
+const lifecycleContext = {
+	cwd: root,
+	hasUI: false,
+	sessionManager: { getBranch: () => [] },
+};
+const sessionStart = extension.handlers.get("session_start")?.[0];
+assert(sessionStart, "session_start handler was not registered");
+assert.equal(sessionStart({ type: "session_start" }, lifecycleContext), undefined, "session_start must not block on interactive setup");
+assert.equal(sessionStart({ type: "session_start" }, lifecycleContext), undefined, "repeated session_start must remain synchronous");
+const sessionShutdown = extension.handlers.get("session_shutdown")?.[0];
+assert(sessionShutdown, "session_shutdown handler was not registered");
+await sessionShutdown({ type: "session_shutdown" }, lifecycleContext);
+
 const bunName = process.platform === "win32" ? "bun.exe" : "bun";
 assert.equal(setupRuntimeExecutable({ BUN_INSTALL: "/runtime/bun" }), path.join("/runtime/bun", "bin", bunName));
 assert.equal(setupRuntimeExecutable({ OMP_COMPUTER_USE_BUN_PATH: "/custom/bun", BUN_INSTALL: "/ignored" }), "/custom/bun");

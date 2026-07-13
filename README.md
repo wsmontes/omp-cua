@@ -33,7 +33,7 @@ Start OMP interactively after installation:
 omp
 ```
 
-On macOS, the startup flow registers the native helper and asks for:
+On macOS, the first computer-use tool call registers the native helper and asks for:
 
 - **Accessibility**
 - **Screen Recording**, called **Screen & System Audio Recording** on newer macOS releases

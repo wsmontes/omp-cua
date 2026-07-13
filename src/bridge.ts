@@ -293,6 +293,7 @@ const runtimeState: RuntimeState = {
 
 const savedStates = new SavedStates();
 let resourceScheduler = new ResourceScheduler();
+let readiness: Promise<void> | undefined;
 
 function operationState(): OperationState {
 	return savedStates.current();
@@ -551,7 +552,7 @@ async function isExecutable(filePath: string): Promise<boolean> {
 	}
 }
 
-async function ensureReady(ctx: ExtensionContext, signal?: AbortSignal): Promise<void> {
+async function performEnsureReady(ctx: ExtensionContext, signal?: AbortSignal): Promise<void> {
 	loadComputerUseConfig(ctx.cwd);
 
 	throwIfAborted(signal);
@@ -569,8 +570,15 @@ async function ensureReady(ctx: ExtensionContext, signal?: AbortSignal): Promise
 	runtimeState.helperDiagnostics = ready.helperDiagnostics;
 }
 
-export async function ensureComputerUseSetup(ctx: ExtensionContext, signal?: AbortSignal): Promise<void> {
-	await ensureReady(ctx, signal);
+async function ensureReady(ctx: ExtensionContext, signal?: AbortSignal): Promise<void> {
+	if (readiness) return await readiness;
+	const pending = performEnsureReady(ctx, signal);
+	readiness = pending;
+	try {
+		await pending;
+	} finally {
+		if (readiness === pending) readiness = undefined;
+	}
 }
 
 async function listApps(signal?: AbortSignal): Promise<HelperApp[]> {
