@@ -1,4 +1,4 @@
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionContext } from "@oh-my-pi/pi-coding-agent";
 import { ensurePermissions, type PermissionKind, type PermissionStatus } from "../../permissions.ts";
 import { toBoolean, toFiniteNumber, toOptionalString } from "../coerce.ts";
 import type { PlatformReadyState } from "../types.ts";
@@ -115,17 +115,17 @@ export async function ensureMacosReady(
 		// Attribution "caller" means the helper is not running as the
 		// canonical installed app — grants would attach to the wrong identity.
 		const attributionHint = permissionStatus.source?.attribution === "caller"
-			? `Warning: the helper is not running as the installed pi-computer-use.app (executable: ${permissionStatus.source?.executablePath ?? "unknown"}). Grants made now would attach to the launching app instead. Restart Pi so the canonical helper is used.`
+			? `Warning: the helper is not running as the installed pi-computer-use.app (executable: ${permissionStatus.source?.executablePath ?? "unknown"}). Grants made now would attach to the launching app instead. Restart OMP so the canonical helper is used.`
 			: undefined;
 		permissionStatus = await ensurePermissions(
 			ctx,
 			{
 				kinds: macosPermissionKinds,
 				copy: {
-					nonInteractiveError: (helperPath) => `pi-computer-use setup requires an interactive session. Start pi in interactive mode. ${GRANT_INSTRUCTIONS}\nHelper path: ${helperPath}`,
+					nonInteractiveError: (helperPath) => `OMP computer-use setup requires an interactive session. Start OMP in interactive mode. ${GRANT_INSTRUCTIONS}\nHelper path: ${helperPath}`,
 					prompt: permissionPrompt,
-					incompleteError: (helperPath) => `pi-computer-use setup is incomplete. ${GRANT_INSTRUCTIONS} Helper path: ${helperPath}`,
-					readyMessage: "pi-computer-use is ready.",
+					incompleteError: (helperPath) => `OMP computer-use setup is incomplete. ${GRANT_INSTRUCTIONS} Helper path: ${helperPath}`,
+					readyMessage: "OMP computer use is ready.",
 					stillMissing: missingPermissionMessage,
 				},
 				checkPermissions: (permissionSignal) => checkPermissions(permissionSignal ?? signal),

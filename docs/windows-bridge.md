@@ -1,6 +1,6 @@
 # Windows Bridge
 
-`windows-bridge.exe` is the native helper for the root-forest Windows backend. It is spawned by the TypeScript helper client and speaks stdin/stdout JSON-lines protocol version **3**.
+`windows-bridge.exe` is the native helper for the root-forest Windows backend. It is spawned by the TypeScript helper client and speaks stdin/stdout JSON-lines protocol version **4**.
 
 ## Backend contract
 
@@ -40,16 +40,16 @@ Root deltas are baselined at act time. The helper polls a cheap top-level HWND s
 Request envelope:
 
 ```json
-{ "protocolVersion": 3, "id": "req_1", "cmd": "listRoots", "args": {} }
+{ "protocolVersion": 4, "id": "req_1", "cmd": "listRoots", "args": {} }
 ```
 
 Response envelope:
 
 ```json
-{ "protocolVersion": 3, "id": "req_1", "ok": true, "result": { } }
+{ "protocolVersion": 4, "id": "req_1", "ok": true, "result": { } }
 ```
 
-Diagnostics (`cmd: "diagnostics"`) returns the protocol version and helper process metadata. The TypeScript backend rejects a mismatched version with a “Restart Pi …” error.
+Diagnostics (`cmd: "diagnostics"`) returns the protocol version and helper process metadata. The TypeScript backend rejects a mismatched version with a “Restart OMP …” error.
 
 ## Remote acceptance notes
 
@@ -58,8 +58,12 @@ Diagnostics (`cmd: "diagnostics"`) returns the protocol version and helper proce
 - **Item 8 / ref re-resolve:** fresh look, capture any element ref, move the window, then act on the same ref with the same `lookId`. RuntimeId/AutomationId re-resolution should succeed with refound semantics, not `stale_ref`.
 - **Pressability smoke:** a fresh look at Win11 Notepad must show `canPress: true` on menu bar items and buttons. If not, attach the raw outline dump so the capability matrix can be inspected.
 
+## Installation
+
+The package does not commit a Windows executable. On the first live tool call, it runs `cargo build --release` against the included Rust crate and installs the result. Rust and `cargo` must therefore be available on `PATH`.
+
 ## Local constraints
 
 - Local child process only; no service, socket, or network listener.
-- Helper path: `%USERPROFILE%\.pi\agent\helpers\pi-computer-use\windows-bridge.exe`.
+- Helper path: `%USERPROFILE%\.omp\agent\helpers\omp-computer-use\windows-bridge.exe`.
 - UIAccess/elevated-window limitations are reported as errors; there is no interactive permission grant loop.

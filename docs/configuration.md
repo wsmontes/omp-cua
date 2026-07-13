@@ -7,13 +7,13 @@ Configuration controls browser access, strict accessibility execution, and the m
 Global config:
 
 ```text
-~/.pi/agent/extensions/pi-computer-use.json
+~/.omp/agent/extensions/omp-computer-use.json
 ```
 
 Project config:
 
 ```text
-.pi/computer-use.json
+.omp/computer-use.json
 ```
 
 Project config overrides global config. Environment variables override both.
@@ -28,7 +28,7 @@ Example:
 }
 ```
 
-Run `/computer-use` in Pi to show the active config and its source.
+Run `/computer-use` in OMP to show the active config and its source.
 
 ## Options
 
@@ -44,7 +44,7 @@ Known browser families include Safari, Chrome and Chromium-family browsers, Fire
 
 Default: `false`
 
-When `true`, actions must remain in the background. Raw pointer events, raw keyboard events, foreground focus fallback, cursor takeover, and the agent cursor overlay are blocked. When `false` (the default), Pi prefers verified semantic activation when it is credible, preserves the focus established by editable clicks for dependent keyboard input, and may retry keyboard input in the foreground when a background attempt conclusively produced no value change. Ambiguous pointer actions are never replayed blindly.
+When `true`, actions must remain in the background. Raw pointer events, raw keyboard events, foreground focus fallback, cursor takeover, and the agent cursor overlay are blocked. When `false` (the default), OMP prefers verified semantic activation when it is credible, preserves the focus established by editable clicks for dependent keyboard input, and may retry keyboard input in the foreground when a background attempt conclusively produced no value change. Ambiguous pointer actions are never replayed blindly.
 
 ### `cursor_overlay`
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 
 import { createHash } from "node:crypto";
 import { spawn, execFile as execFileCallback } from "node:child_process";
@@ -19,11 +19,11 @@ const helperAppExecutablePath = path.join(helperAppPath, "Contents", "MacOS", "b
 const helperSourceHashPath = path.join(helperAppPath, "Contents", "Resources", "source.sha256");
 const helperBundleId = "com.injaneity.pi-computer-use";
 const windowsCrateDir = path.join(rootDir, "native", "windows", "bridge-rs");
-const windowsHelperDestPath = process.env.PI_COMPUTER_USE_WINDOWS_HELPER_PATH || path.join(os.homedir(), ".pi", "agent", "helpers", "pi-computer-use", "windows-bridge.exe");
+const windowsHelperDestPath = process.env.PI_COMPUTER_USE_WINDOWS_HELPER_PATH || path.join(os.homedir(), ".omp", "agent", "helpers", "omp-computer-use", "windows-bridge.exe");
 const helperSourcePaths = ["agent_cursor.swift", "agent_cursor_motion.swift", "bridge.swift"]
 	.map((file) => path.join(rootDir, "native", "macos", file));
 const packageJsonPath = path.join(rootDir, "package.json");
-const releaseRepo = "injaneity/pi-computer-use";
+const releaseRepo = "edlsh/omp-computer-use";
 const localCodeSignCommonName = "pi-computer-use Local Signing (com.injaneity.pi-computer-use)";
 const localSigningLockPath = path.join(os.tmpdir(), `pi-computer-use-local-signing-${typeof process.getuid === "function" ? process.getuid() : "user"}.lock`);
 
@@ -310,7 +310,7 @@ async function createLocalSigningIdentity() {
 		if (!identity) throw new Error("Imported local signing certificate is not a valid code-signing identity.");
 		return identity;
 	} catch (error) {
-		console.warn(`[pi-computer-use] could not create a valid local signing identity: ${error instanceof Error ? error.message : String(error)}`);
+		console.warn(`[omp-computer-use] could not create a valid local signing identity: ${error instanceof Error ? error.message : String(error)}`);
 		return undefined;
 	} finally {
 		await fs.rm(tempDir, { force: true, recursive: true }).catch(() => {});
@@ -331,9 +331,9 @@ async function signHelper(outputPath, identifier = defaultCodeSignIdentifier) {
 	const commandArgs = ["--force", "--deep", "-i", identifier, "--timestamp=none", "--sign", identity, outputPath];
 	await run("codesign", commandArgs);
 	if (identity === "-") {
-		console.warn("[pi-computer-use] warning: signed helper ad-hoc; macOS may require permission review after native helper changes. Release installs should use a Developer ID-signed helper app.");
+		console.warn("[omp-computer-use] warning: signed helper ad-hoc; macOS may require permission review after native helper changes. Release installs should use a Developer ID-signed helper app.");
 	} else if (identity === await findLocalSigningIdentity()) {
-		console.log(`[pi-computer-use] signed ${outputPath} with local identity '${localCodeSignCommonName}'. macOS may still require permission review after local rebuilds.`);
+		console.log(`[omp-computer-use] signed ${outputPath} with local identity '${localCodeSignCommonName}'. macOS may still require permission review after local rebuilds.`);
 	}
 	return identity;
 }
@@ -465,26 +465,26 @@ async function setupWindowsHelper() {
 	if (await exists(prebuiltPath)) {
 		const { changed } = await copyIfChanged(prebuiltPath, windowsHelperDestPath);
 		console.log(changed
-			? `[pi-computer-use] installed Windows helper from prebuilt to ${windowsHelperDestPath}`
-			: `[pi-computer-use] Windows helper already up to date at ${windowsHelperDestPath}`);
+			? `[omp-computer-use] installed Windows helper from prebuilt to ${windowsHelperDestPath}`
+			: `[omp-computer-use] Windows helper already up to date at ${windowsHelperDestPath}`);
 		return;
 	}
 
 	if (allowBuildFallback) {
-		console.log("[pi-computer-use] Windows prebuilt helper missing; attempting source build with cargo...");
+		console.log("[omp-computer-use] Windows prebuilt helper missing; attempting source build with cargo...");
 		await run("cargo", ["build", "--release", "--manifest-path", path.join(windowsCrateDir, "Cargo.toml")]);
 		const { exePath, binPath } = windowsBinaryPath();
 		const cargoOutput = (await exists(exePath)) ? exePath : (await exists(binPath)) ? binPath : exePath;
 		const { changed } = await copyIfChanged(cargoOutput, windowsHelperDestPath);
 		console.log(changed
-			? `[pi-computer-use] built and installed Windows helper at ${windowsHelperDestPath}`
-			: `[pi-computer-use] Windows helper already up to date at ${windowsHelperDestPath}`);
+			? `[omp-computer-use] built and installed Windows helper at ${windowsHelperDestPath}`
+			: `[omp-computer-use] Windows helper already up to date at ${windowsHelperDestPath}`);
 		return;
 	}
 
 	throw new Error(
 		`No Windows prebuilt helper found at ${prebuiltPath}. ` +
-			"Run 'node scripts/build-native.mjs --platform windows' to build, or set PI_COMPUTER_USE_ALLOW_BUILD=1 to build at install time.",
+			"Run 'bun scripts/build-native.mjs --platform windows' to build, or set PI_COMPUTER_USE_ALLOW_BUILD=1 to build at install time.",
 	);
 }
 
@@ -497,10 +497,10 @@ async function setup() {
 
 	if (process.platform !== "darwin") {
 		if (isPostinstall) {
-			console.warn("[pi-computer-use] skipping helper setup: platform is not macOS.");
+			console.warn("[omp-computer-use] skipping helper setup: platform is not macOS.");
 			return;
 		}
-		throw new Error("pi-computer-use helper is only supported on macOS. Use --platform windows on Windows.");
+		throw new Error("OMP computer-use helper is only supported on macOS. Use --platform windows on Windows.");
 	}
 
 	const arch = normalizeArch(process.arch);
@@ -519,8 +519,8 @@ async function setup() {
 		const installed = await installPrebuiltHelperApp(prebuiltAppPath);
 		console.log(
 			installed
-				? `[pi-computer-use] installed pre-signed helper app (${arch}) at ${helperAppPath}`
-				: `[pi-computer-use] pre-signed helper app (${arch}) already current at ${helperAppPath}`,
+				? `[omp-computer-use] installed pre-signed helper app (${arch}) at ${helperAppPath}`
+				: `[omp-computer-use] pre-signed helper app (${arch}) already current at ${helperAppPath}`,
 		);
 		return;
 	}
@@ -529,8 +529,8 @@ async function setup() {
 		const installed = await installHelperApp(prebuiltPath);
 		console.log(
 			installed
-				? `[pi-computer-use] installed helper app (${arch}) at ${helperAppPath}`
-				: `[pi-computer-use] helper app (${arch}) already current at ${helperAppPath}`,
+				? `[omp-computer-use] installed helper app (${arch}) at ${helperAppPath}`
+				: `[omp-computer-use] helper app (${arch}) already current at ${helperAppPath}`,
 		);
 		return;
 	}
@@ -541,27 +541,27 @@ async function setup() {
 			const installed = await installPrebuiltHelperApp(releaseHelper.appPath);
 			console.log(
 				installed
-					? `[pi-computer-use] installed signed helper app from GitHub Release ${releaseHelper.tag} (${releaseHelper.assetName}) at ${helperAppPath}`
-					: `[pi-computer-use] signed helper app from GitHub Release ${releaseHelper.tag} (${releaseHelper.assetName}) already current at ${helperAppPath}`,
+					? `[omp-computer-use] installed signed helper app from GitHub Release ${releaseHelper.tag} (${releaseHelper.assetName}) at ${helperAppPath}`
+					: `[omp-computer-use] signed helper app from GitHub Release ${releaseHelper.tag} (${releaseHelper.assetName}) already current at ${helperAppPath}`,
 			);
 		} finally {
 			await fs.rm(releaseHelper.tempDir, { force: true, recursive: true }).catch(() => {});
 		}
 		return;
 	} catch (error) {
-		console.warn(`[pi-computer-use] signed helper release download unavailable: ${error instanceof Error ? error.message : String(error)}`);
+		console.warn(`[omp-computer-use] signed helper release download unavailable: ${error instanceof Error ? error.message : String(error)}`);
 	}
 
 	if (allowBuildFallback) {
 		const tempPath = path.join(os.tmpdir(), `pi-computer-use-bridge-${process.pid}-${Date.now()}`);
 		try {
-			console.log("[pi-computer-use] prebuilt helper missing; attempting source build with xcrun swiftc...");
+			console.log("[omp-computer-use] prebuilt helper missing; attempting source build with xcrun swiftc...");
 			await buildHelper(arch, tempPath);
 			const installed = await installHelperApp(tempPath);
 			console.log(
 				installed
-					? `[pi-computer-use] built helper app at ${helperAppPath}`
-					: `[pi-computer-use] built helper app; installed app already current at ${helperAppPath}`,
+					? `[omp-computer-use] built helper app at ${helperAppPath}`
+					: `[omp-computer-use] built helper app; installed app already current at ${helperAppPath}`,
 			);
 		} finally {
 			await fs.rm(tempPath, { force: true }).catch(() => {});
@@ -570,14 +570,14 @@ async function setup() {
 	}
 
 	throw new Error(
-		`No prebuilt helper found for ${arch} at ${prebuiltPath}. Run 'npm run build:native' to build locally.`,
+		`No prebuilt helper found for ${arch} at ${prebuiltPath}. Run 'bun run build:native' to build locally.`,
 	);
 }
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) setup().catch((error) => {
 	if (isPostinstall) {
-		console.warn(`[pi-computer-use] postinstall helper setup skipped: ${error instanceof Error ? error.message : String(error)}`);
+		console.warn(`[omp-computer-use] postinstall helper setup skipped: ${error instanceof Error ? error.message : String(error)}`);
 		process.exit(0);
 	}
 

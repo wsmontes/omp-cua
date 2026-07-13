@@ -47,12 +47,12 @@ const HOMEDIR = os.homedir();
 
 // From scripts/setup-helper.mjs:
 const WINDOWS_HELPER_DEST = path.join(
-  HOMEDIR, ".pi", "agent", "helpers", "pi-computer-use", "windows-bridge.exe",
+  HOMEDIR, ".omp", "agent", "helpers", "omp-computer-use", "windows-bridge.exe",
 );
 
 // Expected by src/platform/windows/helper.ts → WINDOWS_HELPER_PATH:
 const WINDOWS_HELPER_STABLE_PATH = path.join(
-  HOMEDIR, ".pi", "agent", "helpers", "pi-computer-use", "windows-bridge.exe",
+  HOMEDIR, ".omp", "agent", "helpers", "omp-computer-use", "windows-bridge.exe",
 );
 
 // windowsBinaryPath() candidates (function present in both scripts):
@@ -91,23 +91,41 @@ function tapMatch(actual, re, msg) {
 }
 
 /** Spawn a script, capturing stdout/stderr and the exit code. */
-function runScript(relPath, args) {
+function runScript(relPath, args, timeoutMs = 120_000) {
   const scriptPath = path.join(__dirname, relPath);
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [scriptPath, ...args], {
       stdio: ["ignore", "pipe", "pipe"],
+      detached: process.platform !== "win32",
       env: {
         ...process.env,
         PI_COMPUTER_USE_HELPER_APP_PATH: TEST_HELPER_APP,
         PI_COMPUTER_USE_WINDOWS_HELPER_PATH: TEST_WINDOWS_HELPER,
+        PI_COMPUTER_USE_NO_SIGN: "1",
       },
     });
     let stdout = "";
     let stderr = "";
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(result);
+    };
+    const timer = setTimeout(() => {
+      try {
+        if (process.platform === "win32" || !child.pid) child.kill("SIGKILL");
+        else process.kill(-child.pid, "SIGKILL");
+      } catch {
+        // The process may have exited between the timeout and kill.
+      }
+      finish({ code: -1, stdout, stderr: `${stderr}\nTimed out after ${timeoutMs}ms.` });
+    }, timeoutMs);
     child.stdout.on("data", (d) => { stdout += d.toString(); });
     child.stderr.on("data", (d) => { stderr += d.toString(); });
-    child.on("close", (code) => resolve({ code, stdout, stderr }));
-    child.on("error", (err) => resolve({ code: -1, stdout, stderr: err.message }));
+    child.on("close", (code) => finish({ code, stdout, stderr }));
+    child.on("error", (err) => finish({ code: -1, stdout, stderr: err.message }));
   });
 }
 

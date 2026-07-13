@@ -1,5 +1,5 @@
 .DS_Store
-.pi/
+.omp/
 node_modules/
 index-*.js
 main.js

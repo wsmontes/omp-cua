@@ -9,14 +9,14 @@ macOS uses an installed helper app and TCC permissions. Windows support uses the
 Install the helper from the package:
 
 ```bash
-node scripts/setup-helper.mjs --runtime
+bun scripts/setup-helper.mjs --runtime
 ```
 
 Or rebuild it locally:
 
 ```bash
-npm run build:native
-node scripts/setup-helper.mjs --force
+bun run build:native
+bun scripts/setup-helper.mjs --runtime --allow-adhoc-update
 ```
 
 The helper app should exist at:
@@ -38,7 +38,7 @@ its toggle and choose **Recheck**. Recheck restarts the helper on purpose:
 macOS caches permission answers per process, so a helper that started
 before the grant would keep reporting "missing" forever.
 
-Older versions used other helper identities such as `bridge`, Terminal, Ghostty, node, Codex, or `PiComputerUseBridge.app`. Those are not current. Grant access to `pi-computer-use.app`.
+Older versions used other helper identities such as `bridge`, Terminal, Ghostty, or `PiComputerUseBridge.app`. Those are not current. Grant access to `pi-computer-use.app`.
 
 To see exactly which identity macOS is charging for a permission check:
 
@@ -64,7 +64,7 @@ tccutil reset ScreenCapture com.injaneity.pi-computer-use
 
 An empty AX tree with Accessibility "granted" is the per-process cache
 again: the grant landed after the helper started. Recheck (which restarts
-the helper) or restart Pi.
+the helper) or restart OMP.
 
 ## Permission source says "caller"
 
@@ -75,11 +75,11 @@ the helper) or restart Pi.
 - `caller` — the bridge is running as a plain binary (dev build, spawned
   from a terminal). Its permission checks are answered with the *launching
   app's* grants (your terminal), and any grant made now attaches to that
-  identity, not the helper. Restart Pi so the installed app is used.
+  identity, not the helper. Restart OMP so the installed app is used.
 
 ## Non-interactive setup fails
 
-Desktop computer use requires an interactive user session. On macOS, start Pi interactively, grant permissions, then retry the non-interactive workflow. On Windows, use an unlocked interactive desktop session.
+Desktop computer use requires an interactive user session. On macOS, start OMP interactively, grant permissions, then retry the non-interactive workflow. On Windows, use an unlocked interactive desktop session.
 
 ## Browser windows are refused
 

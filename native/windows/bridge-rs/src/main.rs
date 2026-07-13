@@ -208,7 +208,7 @@ fn extract_id(line: &str) -> Option<String> {
 
 fn handle_request(request: &Request) -> Response {
     if request.protocol_version != PROTOCOL_VERSION {
-        return Response::err(&request.id, ProtocolError::new(format!("Unsupported Windows helper protocol {}; expected {}. Restart Pi to use the installed helper.", request.protocol_version, PROTOCOL_VERSION), ErrorCode::InvalidRequest));
+        return Response::err(&request.id, ProtocolError::new(format!("Unsupported Windows helper protocol {}; expected {}. Restart OMP to use the installed helper.", request.protocol_version, PROTOCOL_VERSION), ErrorCode::InvalidRequest));
     }
 
     let result = match request.cmd.as_str() {

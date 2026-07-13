@@ -52,7 +52,7 @@ act_ui({ stateId, actions: [{ action: "press", ref: "@e12" }] })
 ```
 
 When an action has an observable completion signal, attach it to the same
-transaction. Pi waits through the platform change-notification path and marks
+transaction. OMP waits through the platform change-notification path and marks
 the execution `didnt` with `postcondition_failed` if the application swallowed
 the delivered event:
 
@@ -132,4 +132,4 @@ navigate_browser({ stateId: returnedStateId, url: "https://openai.com" })
 
 ## Parallel calls
 
-Pi may issue tool calls concurrently. Cached queries can overlap freely. Live work for different desktop processes or CDP pages can overlap; work for the same physical resource is ordered. Do not intentionally race two mutations derived from the same state: one wins and the other receives a stale-state error by design.
+OMP may issue tool calls concurrently. Cached queries can overlap freely. Live work for different desktop processes or CDP pages can overlap; work for the same physical resource is ordered. Do not intentionally race two mutations derived from the same state: one wins and the other receives a stale-state error by design.

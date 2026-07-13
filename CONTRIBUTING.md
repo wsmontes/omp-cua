@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping improve `pi-computer-use`.
+Thanks for helping improve `omp-computer-use`.
 
 ## Before you start
 
@@ -9,20 +9,20 @@ Open an issue before starting work. Use it to agree on scope, validation, and an
 ## Setup
 
 ```bash
-npm install
-npm test
+bun install
+bun run test
 ```
 
-Run this checkout in Pi:
+Run this checkout in OMP:
 
 ```bash
-pi --no-extensions -e .
+omp --no-extensions --extension ./extensions/computer-use.ts
 ```
 
 If you change native code, rebuild the helper:
 
 ```bash
-npm run build:native
+bun run build:native
 ```
 
 macOS permissions should be granted to:
@@ -36,8 +36,8 @@ macOS permissions should be granted to:
 Use the smallest check that proves the change:
 
 - Documentation changes: proofread changed files and check touched links or commands.
-- TypeScript or schema changes: run `npm test`.
-- Native helper changes: run `npm run build:native` and `npm test`.
+- TypeScript or schema changes: run `bun run test`.
+- Native helper changes: run `bun run build:native` and `bun run test`.
 - Behavior changes: run `cubench` against the registered extension tools.
 
 The in-repo legacy benchmark harness was removed because it targeted old direct action tools. Use `cubench` for behavioral validation.
@@ -61,7 +61,7 @@ refactor(extension): simplify public tool surface
 Check a range locally with:
 
 ```bash
-npm run test:commits -- <base>..<head>
+bun run test:commits -- <base>..<head>
 ```
 
 ## Pull requests

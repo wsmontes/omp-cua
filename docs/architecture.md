@@ -1,6 +1,6 @@
 # Architecture
 
-`pi-computer-use` exposes one state-scoped interface for desktop and browser UI:
+`omp-computer-use` exposes one state-scoped interface for desktop and browser UI:
 
 ```text
 find roots → observe one root → search/expand/inspect its state → act from that state
@@ -29,7 +29,7 @@ The implementation keeps that ownership explicit:
 
 ```mermaid
 flowchart TB
-    A["Agent tool calls<br/>Pi may issue them concurrently"] --> C["State-scoped contract<br/>root @r / stateId / element @e"]
+    A["Agent tool calls<br/>OMP may issue them concurrently"] --> C["State-scoped contract<br/>root @r / stateId / element @e"]
     C --> Q{"Cached or live?"}
     Q -->|"cached search / expand / inspect"| S["Bounded immutable state store"]
     Q -->|"observe / act / live read"| R["Resource scheduler"]
@@ -106,7 +106,7 @@ One action is represented by an array of length one. A multi-action transaction 
 
 The bridge resolves model intent; the backend/helper owns grounding, preflight, delivery, and evidence. Accessibility capabilities choose an initial strategy but are not treated as proof that the intended result occurred. Editable-region clicks establish foreground focus for following unscoped keyboard steps in the same transaction. Raw coordinates are tied to the image-bearing state that produced them. Web-backed editable controls use atomic keyboard events and web-backed buttons use pointer events so application state receives normal input events rather than only a changed AX value. A helper result reports `worked`, `didnt`, or `unknown`, including evidence and shallow root changes where available.
 
-With `headless: true`, the background boundary is strict: Pi must never activate or raise an application, change the user's focused window, move the global cursor, post raw input, or display the agent cursor. With `headless: false` (the default), credible semantic activation may begin in the background, editable clicks preserve the focus they establish for following unscoped keyboard input, and keyboard input with a checked `didnt` result may retry in the foreground because the first attempt proved side-effect-free. Focus-preserving native keyboard requests must not raise or re-focus the window between semantic activation and HID delivery; canvas editors such as PowerPoint otherwise collapse an inner text editor back to placeholder selection. Ambiguous pointer outcomes are never replayed. With `cursor_overlay: true`, macOS pointer actions enqueue a click-through agent cursor animation to the native grounded point without delaying delivery.
+With `headless: true`, the background boundary is strict: OMP must never activate or raise an application, change the user's focused window, move the global cursor, post raw input, or display the agent cursor. With `headless: false` (the default), credible semantic activation may begin in the background, editable clicks preserve the focus they establish for following unscoped keyboard input, and keyboard input with a checked `didnt` result may retry in the foreground because the first attempt proved side-effect-free. Focus-preserving native keyboard requests must not raise or re-focus the window between semantic activation and HID delivery; canvas editors such as PowerPoint otherwise collapse an inner text editor back to placeholder selection. Ambiguous pointer outcomes are never replayed. With `cursor_overlay: true`, macOS pointer actions enqueue a click-through agent cursor animation to the native grounded point without delaying delivery.
 
 The agent-facing `act_ui.headless` flag determines whether foreground execution is prohibited. Fallback-capable multi-action calls execute one checked action at a time, retain click-established focus, and stop on a checked `didnt`; strict-headless calls retain native transactional batching.
 

@@ -91,7 +91,7 @@ async function ensureReady(_ctx: unknown, state: PlatformReadyState, signal?: Ab
 	await windowsHelper.ensureInstalled(signal);
 	const diagnostics = await windowsHelper.command<any>("diagnostics", {}, { signal, timeoutMs: 5_000 });
 	if (diagnostics?.protocolVersion !== WINDOWS_HELPER_PROTOCOL_VERSION) {
-		throw new Error(`Windows helper protocol mismatch: expected ${WINDOWS_HELPER_PROTOCOL_VERSION}, got ${diagnostics?.protocolVersion ?? "unknown"}. Restart Pi to use the installed helper.`);
+		throw new Error(`Windows helper protocol mismatch: expected ${WINDOWS_HELPER_PROTOCOL_VERSION}, got ${diagnostics?.protocolVersion ?? "unknown"}. Restart OMP to use the installed helper.`);
 	}
 	assertPlatformArchitecture("Windows", diagnostics);
 	return { ...state, lastPermissionCheckAt: Date.now(), helperDiagnostics: diagnostics };

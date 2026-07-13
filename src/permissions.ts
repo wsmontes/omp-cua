@@ -1,4 +1,4 @@
-import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionContext } from "@oh-my-pi/pi-coding-agent";
 
 // Which process identity the permission answers reflect. Platforms may
 // attribute grants to a responsible parent process rather than the helper

@@ -1,31 +1,33 @@
 {
-	"name": "@injaneity/pi-computer-use",
-	"version": "0.4.3",
-	"description": "Pi extension that lets AI agents observe and control macOS and Windows apps.",
+	"name": "@edlsh/omp-computer-use",
+	"version": "0.1.0",
+	"description": "Native OMP extension for observing and controlling macOS and Windows apps.",
 	"type": "module",
 	"keywords": [
-		"pi-package",
-		"pi-extension",
-		"pi",
+		"omp",
+		"oh-my-pi",
+		"omp-extension",
 		"computer-use",
 		"macos",
+		"windows",
 		"desktop-automation",
 		"accessibility"
 	],
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/injaneity/pi-computer-use.git"
+		"url": "git+https://github.com/edlsh/omp-computer-use.git"
 	},
 	"bugs": {
-		"url": "https://github.com/injaneity/pi-computer-use/issues"
+		"url": "https://github.com/edlsh/omp-computer-use/issues"
 	},
-	"homepage": "https://github.com/injaneity/pi-computer-use#readme",
+	"homepage": "https://github.com/edlsh/omp-computer-use#readme",
 	"engines": {
-		"node": ">=20.6.0"
+		"bun": ">=1.3.14"
 	},
 	"files": [
 		"extensions",
+		"skills",
 		"src",
 		"scripts/build-native.mjs",
 		"scripts/setup-helper.mjs",
@@ -40,34 +42,37 @@
 		"README.md",
 		"LICENSE"
 	],
-	"pi": {
+	"omp": {
 		"extensions": [
 			"./extensions"
+		],
+		"skills": [
+			"./skills"
 		],
 		"image": "./assets/reference/img.jpg"
 	},
 	"scripts": {
-		"postinstall": "node scripts/setup-helper.mjs --postinstall",
+		"postinstall": "bun scripts/setup-helper.mjs --postinstall",
 		"typecheck": "tsc -p tsconfig.json",
-		"test:schema": "node scripts/check-tool-schemas.mjs",
-		"test:invariants": "node scripts/check-invariants.mjs",
-		"test:lifecycle": "node --experimental-transform-types scripts/check-session-lifecycle.mjs",
-		"test:runtime": "node --experimental-transform-types scripts/check-runtime-concurrency.mjs",
-		"test:commits": "node scripts/check-commit-messages.mjs",
-		"test:platform": "node --experimental-strip-types scripts/check-platform-windows.mjs",
-		"test:windows-scripts": "node scripts/check-windows-build-scripts.mjs",
-		"test:signing": "node scripts/check-local-signing.mjs",
-		"test": "npm run typecheck && npm run test:schema && npm run test:lifecycle && npm run test:runtime && npm run test:invariants && npm run test:signing",
-		"build:native": "node scripts/build-native.mjs",
-		"build:windows": "node scripts/build-native.mjs --platform windows"
+		"test:schema": "bun scripts/check-tool-schemas.mjs",
+		"test:omp": "bun scripts/check-omp-extension.mjs",
+		"test:invariants": "bun scripts/check-invariants.mjs",
+		"test:lifecycle": "bun scripts/check-session-lifecycle.mjs",
+		"test:runtime": "bun scripts/check-runtime-concurrency.mjs",
+		"test:commits": "bun scripts/check-commit-messages.mjs",
+		"test:platform": "bun scripts/check-platform-windows.mjs",
+		"test:windows-scripts": "bun scripts/check-windows-build-scripts.mjs",
+		"test:signing": "bun scripts/check-local-signing.mjs",
+		"test": "bun run typecheck && bun run test:schema && bun run test:omp && bun run test:lifecycle && bun run test:runtime && bun run test:invariants && bun run test:signing",
+		"build:native": "bun scripts/build-native.mjs",
+		"build:windows": "bun scripts/build-native.mjs --platform windows"
 	},
 	"peerDependencies": {
-		"@earendil-works/pi-ai": "*",
-		"@earendil-works/pi-coding-agent": "*",
-		"typebox": "*"
+		"@oh-my-pi/pi-coding-agent": ">=16.4.6"
 	},
 	"devDependencies": {
-		"@types/node": "^25.6.0",
+		"@oh-my-pi/pi-coding-agent": "16.4.8",
+		"@types/bun": "^1.3.14",
 		"typescript": "^6.0.3"
 	}
 }

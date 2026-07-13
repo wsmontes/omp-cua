@@ -5,7 +5,7 @@ import { access } from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import type { AgentToolResult, AgentToolUpdateCallback, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { AgentToolResult, AgentToolUpdateCallback, ExtensionContext } from "@oh-my-pi/pi-coding-agent";
 import { canRetryInForeground, outcomeAfterCheck, outcomeAfterObservedValues, prepareAction, type ActionState, type PreparedAction } from "./actions.ts";
 import { cdpClickForContext, cdpEvaluateForContext, cdpNavigateContext, cdpScrollForContext, cdpSnapshotForContext, cdpTabForWindow, cdpTypeForContext, disconnectCdp, listCdpPageContexts, type CdpConsoleEntry, type CdpPageSnapshot } from "./cdp.ts";
 import { getComputerUseConfig, isBrowserUseEnabled, isHeadlessMode, loadComputerUseConfig } from "./config.ts";
@@ -309,7 +309,7 @@ function persistOperation(state: OperationState): void {
 	savedStates.saveDesktop(state, resourceKey, epoch);
 }
 
-/** Release handles and state owned by the current Pi session. */
+/** Release handles and state owned by the current OMP session. */
 export async function shutdownComputerUseSession(): Promise<void> {
 	await resourceScheduler.close();
 	resourceScheduler = new ResourceScheduler();
@@ -644,7 +644,7 @@ async function focusControlledWindow(target: ResolvedTarget, signal?: AbortSigna
 function assertBrowserUseAllowed(target: { appName: string; bundleId?: string }): void {
 	if (!isBrowserUseEnabled() && currentPlatformBackend.isBrowserApp(target.appName, target.bundleId)) {
 		throw new Error(
-			`Browser use is disabled by pi-computer-use config, so '${target.appName}' cannot be controlled. Enable browser_use in ~/.pi/agent/extensions/pi-computer-use.json or .pi/computer-use.json to allow browser windows.`,
+			`Browser use is disabled by OMP computer-use config, so '${target.appName}' cannot be controlled. Enable browser_use in ~/.omp/agent/extensions/omp-computer-use.json or .omp/computer-use.json to allow browser windows.`,
 		);
 	}
 }
@@ -1526,7 +1526,7 @@ async function performListWindows(params: FindParams, signal?: AbortSignal): Pro
 	const lines = windows.map(formatWindowLine);
 	const text = lines.length
 		? `Found ${lines.length} root${lines.length === 1 ? "" : "s"}${query.query ? ` for ${JSON.stringify(query.query)}` : ""}. Use @r refs with observe({ root: "@rN" }).\n${lines.join("\n")}`
-		: `No roots are currently visible to pi-computer-use.`;
+		: "No roots are currently visible to OMP computer use.";
 	return { content: [{ type: "text", text }], details };
 }
 
@@ -2098,7 +2098,7 @@ async function waitForCdpPort(port: number, signal?: AbortSignal): Promise<void>
 	throw new Error(`Managed browser did not expose CDP on port ${port} within ${MANAGED_BROWSER_READY_TIMEOUT_MS}ms.`);
 }
 
-// Side effects: starts a Pi-managed browser process, replaces any previous managed browser,
+// Side effects: starts an OMP-managed browser process, replaces any previous managed browser,
 // and sets PI_COMPUTER_USE_CDP_PORT for subsequent CDP context discovery.
 async function performLaunchBrowser(params: LaunchBrowserParams, signal?: AbortSignal): Promise<AgentToolResult<LaunchBrowserDetails>> {
 	const browser = params.browser === "chrome" ? "chrome" : "helium";
@@ -2230,6 +2230,7 @@ async function performEvaluateBrowser(params: EvaluateBrowserParams): Promise<Ag
 		const result = await cdpEvaluateForContext(contextId, expression);
 		if (!result) throw new Error(`Browser context '${contextId}' is no longer available. Observe it again.`);
 		const successor = await refreshBrowserSnapshot(contextId, "evaluate_browser", { stateId: baseSnapshot.snapshotId, outline: baseSnapshot.outline });
+		if (!successor.details) throw new Error("Browser evaluation produced no successor state details.");
 		const details: EvaluateBrowserDetails = {
 			tool: "evaluate_browser",
 			baseStateId: baseSnapshot.snapshotId,

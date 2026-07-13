@@ -1,62 +1,68 @@
-# pi-computer-use
+# omp-computer-use
 
-<p align="center">
-  <img src="./assets/logo/logo3.png" width="50%" alt="pi-computer-use">
-</p>
+Native [Oh My Pi](https://github.com/can1357/oh-my-pi) extension for state-scoped desktop control on macOS and Windows.
 
-`pi-computer-use` lets AI agents use desktop apps on macOS and Windows.
+`omp-computer-use` lets OMP agents inspect application windows, find controls, click, type, scroll, wait for UI changes, and verify observable outcomes. It keeps complete immutable observations behind compact `stateId`-scoped views so concurrent calls cannot silently act on stale UI.
 
 The macOS helper requires macOS 14 or newer.
 
-An agent can look at an app window, understand the buttons and text inside it, and perform actions like clicking, typing, scrolling, and waiting for something to change. This is useful when the agent needs to work with a normal desktop app instead of an API, a terminal command, or a file.
+## When to use it
 
-New to computer use? Start with: [Wait, what exactly is Computer Use?](http://localhost:4173/what-exactly-is-computer-use/)
+Prefer a reliable API, MCP server, file operation, terminal command, or OMP's dedicated browser tool when one fits. Computer use is for software whose usable interface is the app on screen.
 
-## What this package does
+The extension adds:
 
-This is a Pi extension. After installation, Pi agents get tools for:
-
-- finding open apps and windows
-- observing what is visible in a window
-- searching the visible interface for text, buttons, and controls
-- inspecting parts of the interface in more detail
-- clicking, typing, scrolling, and pressing UI controls
-- waiting for UI changes
-
-In short: it gives an agent a controlled way to operate desktop software.
-
-## What this package is not
-
-`pi-computer-use` is not a replacement for app APIs or MCP servers. If an app has a reliable direct integration, use that first.
-
-Computer use is most helpful when the only available interface is the app on screen.
+- first-class OMP tools with read/write/exec approval tiers;
+- macOS Accessibility and ScreenCaptureKit integration;
+- Windows UI Automation and native input integration;
+- immutable UI states with stale-write rejection;
+- cached search, expansion, inspection, and paginated text;
+- checked action batches, semantic postconditions, and successor diffs;
+- optional OCR-backed fused observations;
+- managed CDP browser roots sharing the same state model.
 
 ## Install
 
 ```bash
-pi install git:github.com/injaneity/pi-computer-use@v0.4.3
+omp install git:github.com/edlsh/omp-computer-use
 ```
 
-Start Pi and complete the platform setup flow.
+Start OMP interactively after installation:
 
-On macOS, grant permissions to:
+```bash
+omp
+```
+
+On macOS, the startup flow registers the native helper and asks for:
+
+- **Accessibility**
+- **Screen Recording**, called **Screen & System Audio Recording** on newer macOS releases
+
+Grant both permissions to:
 
 ```text
 /Applications/pi-computer-use.app
 ```
 
-Required macOS permissions:
+The helper retains the upstream app identity so upgrades do not unnecessarily replace the macOS permission target. Enable each toggle, return to OMP, and choose **Recheck (restarts helper)**.
 
-- Accessibility
-- Screen Recording, shown as Screen and System Audio Recording on newer macOS versions
+On Windows, run OMP in an unlocked interactive desktop session. The package does not include a Windows executable; its first live tool call builds the included Rust helper, so Rust and `cargo` must be on `PATH`. The helper is then installed under:
 
-The macOS setup flow registers the helper first, so it should already appear in both Settings panes. Enable the toggles and choose Recheck.
+```text
+%USERPROFILE%\.omp\agent\helpers\omp-computer-use\windows-bridge.exe
+```
 
-On Windows, use an interactive desktop session. Windows support uses the platform accessibility APIs and does not use the macOS helper app or TCC permission flow.
+Use `/computer-use` inside OMP to show the effective configuration and its sources.
 
-Use `/computer-use` inside Pi to show the active configuration and where it came from.
+## Core workflow
 
-## Main tools
+```text
+find_roots → observe_ui → search_ui / expand_ui / inspect_ui → act_ui
+```
+
+An `@eN` element ref belongs only to the `stateId` that returned it. Continue from the successor state after every mutation; re-observe after uncertain outcomes or external UI changes.
+
+Main tools:
 
 - `find_roots`
 - `observe_ui`
@@ -66,10 +72,53 @@ Use `/computer-use` inside Pi to show the active configuration and where it came
 - `act_ui`
 - `read_text`
 - `wait_for`
+- `launch_browser`
+- `navigate_browser`
+- `evaluate_browser`
 
-See [docs/usage.md](./docs/usage.md) for the full tool reference.
+The included `omp-computer-use` skill teaches OMP the state/ref workflow automatically.
 
-## Documentation
+## Configuration
+
+User configuration:
+
+```text
+~/.omp/agent/extensions/omp-computer-use.json
+```
+
+Project configuration:
+
+```text
+<project>/.omp/computer-use.json
+```
+
+Example:
+
+```json
+{
+  "browser_use": true,
+  "headless": false,
+  "cursor_overlay": true
+}
+```
+
+Project settings override user settings. `PI_COMPUTER_USE_BROWSER_USE`, `PI_COMPUTER_USE_HEADLESS`, and `PI_COMPUTER_USE_CURSOR_OVERLAY` override both. See [Configuration](./docs/configuration.md) for details.
+
+## Development
+
+```bash
+bun install
+bun run test
+```
+
+Additional platform checks:
+
+```bash
+bun run test:platform
+bun run test:windows-scripts
+```
+
+See:
 
 - [Usage](./docs/usage.md)
 - [Architecture](./docs/architecture.md)
@@ -78,9 +127,9 @@ See [docs/usage.md](./docs/usage.md) for the full tool reference.
 - [Troubleshooting](./docs/troubleshooting.md)
 - [Contributing](./CONTRIBUTING.md)
 
-## Development status
+## Upstream
 
-The architecture is centered on immutable, state-scoped observations. Desktop surfaces and CDP pages form one multi-root forest; progressive outline queries remain cached, while live work is ordered per physical resource so independent roots can run in parallel. `act_ui` accepts one or more intent steps, preserves focus across dependent input, verifies delivery, recovers safely, stores one complete successor state, and returns a compact diff when identity confidence allows. Older direct tools such as `screenshot`, `click`, `set_text`, and `computer_actions` are no longer part of the public extension surface.
+This project is an OMP-native port of [`injaneity/pi-computer-use`](https://github.com/injaneity/pi-computer-use). It preserves the upstream native helpers, state model, and MIT license while replacing the host integration, package metadata, paths, approval policy, runtime guidance, and Bun lifecycle for Oh My Pi.
 
 ## License
 

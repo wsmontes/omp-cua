@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 import {
 	executeAct,
 	executeFind,
@@ -51,7 +51,7 @@ async function selectRoot() {
 	const candidate = windows.find((item) => /cubench/i.test(item.windowTitle)) ?? windows.find((item) => item.isFocused) ?? windows[0];
 	if (!candidate) throw new Error("Could not find the headed Cubench Chromium window");
 	root = candidate.windowRef;
-	if (process.env.CUBENCH_PI_DEBUG === "1") console.error(JSON.stringify({ root, window: candidate.windowTitle, app: candidate.app, bundleId: candidate.bundleId }));
+	if (process.env.CUBENCH_OMP_DEBUG === "1") console.error(JSON.stringify({ root, window: candidate.windowTitle, app: candidate.app, bundleId: candidate.bundleId }));
 }
 
 async function observe() {
@@ -75,7 +75,7 @@ async function act(actions, expect) {
 	const result = await tool(executeAct, { stateId, actions, expect, image: "auto" });
 	stateId = result.details?.capture?.stateId;
 	if (!stateId) throw new Error("Cubench action did not return a resulting desktop state");
-	if (process.env.CUBENCH_PI_DEBUG === "1") console.error(JSON.stringify({
+	if (process.env.CUBENCH_OMP_DEBUG === "1") console.error(JSON.stringify({
 		actions,
 		outcome: result.details?.execution?.outcome,
 		steps: result.details?.execution?.steps?.map((step) => ({ grounding: step.performed?.grounding, delivery: step.performed?.delivery, policy: step.deliveryPolicy, escalated: step.escalatedToForeground })) ?? [],
@@ -95,27 +95,27 @@ async function rename(instruction) {
 		target = await exact(from);
 	}
 	if (!target) throw new Error(`Could not find ${from}`);
-	if (process.env.CUBENCH_PI_DEBUG === "1") console.error(JSON.stringify({ from, to, target: { ref: target.ref, label: target.label, role: target.role } }));
+	if (process.env.CUBENCH_OMP_DEBUG === "1") console.error(JSON.stringify({ from, to, target: { ref: target.ref, label: target.label, role: target.role } }));
 	await act([{ action: "click", ref: target.ref }]);
 
 	const editorMatches = [
 		...(await search({ role: "AXTextField" })),
 		...(await search({ role: "AXTextArea" })),
 	];
-	if (process.env.CUBENCH_PI_DEBUG === "1") console.error(JSON.stringify({ editorMatches: editorMatches.map((item) => ({ ref: item.ref, label: item.label, role: item.role, canSetValue: item.node?.canSetValue })) }));
+	if (process.env.CUBENCH_OMP_DEBUG === "1") console.error(JSON.stringify({ editorMatches: editorMatches.map((item) => ({ ref: item.ref, label: item.label, role: item.role, canSetValue: item.node?.canSetValue })) }));
 	const editor = editorMatches.find((item) => /new name/i.test(item.label) && item.node?.canSetValue)
 		?? editorMatches.find((item) => item.node?.canSetValue && !/address|search bar/i.test(item.label))
 		?? editorMatches.find((item) => !/address|search bar/i.test(item.label));
-	if (process.env.CUBENCH_PI_DEBUG === "1") console.error(JSON.stringify({ editor: editor && { ref: editor.ref, label: editor.label, role: editor.role } }));
+	if (process.env.CUBENCH_OMP_DEBUG === "1") console.error(JSON.stringify({ editor: editor && { ref: editor.ref, label: editor.label, role: editor.role } }));
 	if (editor) await act([{ action: "setText", ref: editor.ref, text: to }]);
 	else await act([{ action: "keypress", keys: ["cmd", "a"] }, { action: "typeText", text: to }]);
-	if (process.env.CUBENCH_PI_DEBUG === "1") console.error(JSON.stringify({ typedMatch: await exact(to) }));
+	if (process.env.CUBENCH_OMP_DEBUG === "1") console.error(JSON.stringify({ typedMatch: await exact(to) }));
 
 	const renameButton = (await exact("Rename")) ?? (await exact("OK"));
 	if (!renameButton) throw new Error("Could not find the rename button");
-	if (process.env.CUBENCH_PI_DEBUG === "1") console.error(JSON.stringify({ renameButton: { ref: renameButton.ref, label: renameButton.label, role: renameButton.role } }));
+	if (process.env.CUBENCH_OMP_DEBUG === "1") console.error(JSON.stringify({ renameButton: { ref: renameButton.ref, label: renameButton.label, role: renameButton.role } }));
 	await act([{ action: "click", ref: renameButton.ref }]);
-	if (process.env.CUBENCH_PI_DEBUG === "1") console.error(JSON.stringify({ afterRename: await request("GET", "/evaluate") }));
+	if (process.env.CUBENCH_OMP_DEBUG === "1") console.error(JSON.stringify({ afterRename: await request("GET", "/evaluate") }));
 	const confirm = await exact("Confirm");
 	if (confirm) await act([{ action: "click", ref: confirm.ref }], { text: to, timeoutMs: 5_000 });
 }

@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { toBoolean, toFiniteNumber, toOptionalString } from "../coerce.ts";
 import type { PlatformDiagnostics } from "../types.ts";
+import { setupRuntimeExecutable } from "../setup-runtime.ts";
 
 const COMMAND_TIMEOUT_MS = 15_000;
 const HELPER_PROTOCOL_VERSION = 6;
@@ -147,10 +148,7 @@ export class MacosHelperClient {
 		}
 
 		// setup-helper syncs the installed helper version/signature once per session.
-		await runProcess(process.execPath, [SETUP_HELPER_SCRIPT, "--runtime"], HELPER_SETUP_TIMEOUT_MS, signal, {
-			...process.env,
-			ELECTRON_RUN_AS_NODE: "1",
-		});
+		await runProcess(setupRuntimeExecutable(), [SETUP_HELPER_SCRIPT, "--runtime"], HELPER_SETUP_TIMEOUT_MS, signal, process.env);
 		this.helperInstallChecked = true;
 
 		if (!(await isExecutable(HELPER_APP_EXECUTABLE_PATH))) {
@@ -260,7 +258,7 @@ export class MacosHelperClient {
 		let diagnostics = await this.diagnosticsCommand(signal);
 		if (diagnostics.protocolVersion === HELPER_PROTOCOL_VERSION) return diagnostics;
 
-		// The helper daemon outlives Pi, so restarting/reloading Pi alone does not
+		// The helper daemon outlives OMP, so restarting/reloading OMP alone does not
 		// replace a daemon that is still serving the previous installed binary.
 		// Stop it through the backwards-compatible command channel and relaunch
 		// the app that ensureInstalled() has just synced to /Applications.
