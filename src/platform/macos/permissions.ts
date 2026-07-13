@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import type { ExtensionContext } from "@oh-my-pi/pi-coding-agent";
 import { ensurePermissions, type PermissionKind, type PermissionStatus } from "../../permissions.ts";
 import { toBoolean, toFiniteNumber, toOptionalString } from "../coerce.ts";
@@ -18,6 +19,20 @@ const macosPermissionKinds = [
 	{ kind: "accessibility" as const, openOption: "Open Accessibility Settings (missing)" },
 	{ kind: "screenRecording" as const, openOption: "Open Screen Recording Settings (missing)" },
 ];
+
+const permissionPaneUrls: Record<PermissionKind, string> = {
+	accessibility: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+	screenRecording: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+};
+
+async function openPermissionPane(kind: PermissionKind, signal?: AbortSignal): Promise<void> {
+	await new Promise<void>((resolve, reject) => {
+		execFile("/usr/bin/open", [permissionPaneUrls[kind]], { signal }, (error) => {
+			if (error) reject(error);
+			else resolve();
+		});
+	});
+}
 
 function permissionStatusSummary(status: PermissionStatus): string {
 	const lines = [
@@ -130,9 +145,7 @@ export async function ensureMacosReady(
 				},
 				checkPermissions: (permissionSignal) => checkPermissions(permissionSignal ?? signal),
 				registerPermissions: (permissionSignal) => registerPermissions(permissionSignal ?? signal),
-				openPermissionPane: async (kind, permissionSignal) => {
-					await macosHelper.command("openPermissionPane", { kind }, { signal: permissionSignal ?? signal });
-				},
+				openPermissionPane: (kind, permissionSignal) => openPermissionPane(kind, permissionSignal ?? signal),
 				restartHelper: (permissionSignal) => macosHelper.restart(permissionSignal ?? signal),
 				permissionHint: attributionHint,
 			},

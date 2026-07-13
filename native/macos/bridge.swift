@@ -567,8 +567,6 @@ final class Bridge {
 			return checkPermissions()
 		case "registerPermissions":
 			return try registerPermissions()
-		case "openPermissionPane":
-			return try openPermissionPane(request)
 		case "shutdown":
 			// Reply first, then exit: the caller relaunches the helper to get a
 			// process with a fresh TCC client (grant answers are cached per
@@ -850,25 +848,6 @@ final class Bridge {
 			"screenRecording": capturable,
 			"screenRecordingCapturable": capturable,
 		]
-	}
-
-	private func openPermissionPane(_ request: [String: Any]) throws -> [String: Any] {
-		let kind = try stringArg(request, "kind")
-		let urlString: String
-		switch kind {
-		case "accessibility":
-			urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
-		case "screenRecording", "screenrecording":
-			urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
-		default:
-			throw BridgeFailure(message: "Unknown permission pane '\(kind)'", code: "invalid_args")
-		}
-
-		guard let url = URL(string: urlString) else {
-			throw BridgeFailure(message: "Invalid permission pane URL", code: "internal_error")
-		}
-		let opened = NSWorkspace.shared.open(url)
-		return ["opened": opened]
 	}
 
 	private func pidIsAlive(_ pid: pid_t) -> Bool {
