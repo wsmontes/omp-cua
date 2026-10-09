@@ -12,6 +12,7 @@
 import {
 	executeAct,
 	executeAppControl,
+	executeBrowserAttach,
 	executeEvaluateBrowser,
 	executeExpandUi,
 	executeFind,
@@ -365,6 +366,22 @@ export function buildToolDefinitions<S extends JsonSchema = JsonSchema>(
 				port: Type.Optional(Type.Number()),
 			}),
 			execute: executeLaunchBrowser,
+		},
+		{
+			name: "browser_attach",
+			label: "Attach Real Browser",
+			description:
+				"Attach to a running browser through a multiplexing CDP relay and expose its pages as browser_page roots, which observe_ui, act_ui, navigate_browser, and evaluate_browser then drive. This is how the user's own signed-in browser becomes controllable: the relay runs an extension inside it rather than launching a separate, empty profile. The endpoint is verified before success is reported, and find_roots lists the attached pages.",
+			approval: "write",
+			parameters: Type.Object({
+				url: Type.Optional(
+					Type.String({
+						description:
+							"Relay HTTP endpoint, e.g. http://127.0.0.1:9224 (the default)",
+					}),
+				),
+			}),
+			execute: executeBrowserAttach,
 		},
 		{
 			name: "navigate_browser",

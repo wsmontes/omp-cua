@@ -1,12 +1,15 @@
 // Minimal Chrome DevTools Protocol client.
 //
-// Opt-in: set PI_COMPUTER_USE_CDP_PORT to the --remote-debugging-port of a
-// running Chromium-family browser. When active, navigate_browser uses
-// Page.navigate (event-driven, no AppleScript) and recent console messages
-// and uncaught exceptions are attached to tool results. Everything else
-// keeps the AX/CGEvent path, so with the env var unset this module is inert.
+// Opt-in, two ways: set PI_COMPUTER_USE_CDP_PORT to the --remote-debugging-port
+// of a running Chromium-family browser, or point PI_COMPUTER_USE_RELAY_URL at a
+// multiplexing relay that drives the user's own browser. When active,
+// navigate_browser uses Page.navigate (event-driven, no AppleScript) and recent
+// console messages and uncaught exceptions are attached to tool results.
+// Everything else keeps the AX/CGEvent path, so with neither set this module is
+// inert.
 
 import { randomUUID } from "node:crypto";
+import { CdpRelayEndpoint, type CdpChannel } from "./cdp-relay.ts";
 import { parseLookResponse, serializeOutline, type SerializedOutline } from "./outline.ts";
 
 export interface CdpConsoleEntry {
@@ -66,6 +69,31 @@ const NAVIGATE_LOAD_TIMEOUT_MS = 10_000;
 const CONNECT_FAILURE_RETRY_MS = 5_000;
 const CONSOLE_BUFFER_LIMIT = 20;
 
+/** Adapts a direct per-page socket to the channel interface. */
+class WebSocketChannel implements CdpChannel {
+	onmessage: ((event: { data: unknown }) => void) | null = null;
+	onclose: (() => void) | null = null;
+	onerror: (() => void) | null = null;
+
+	constructor(private readonly ws: WebSocket) {
+		ws.onmessage = (event) => this.onmessage?.({ data: event.data });
+		ws.onclose = () => this.onclose?.();
+		ws.onerror = () => this.onerror?.();
+	}
+
+	get readyState(): number {
+		return this.ws.readyState;
+	}
+
+	send(data: string): void {
+		this.ws.send(data);
+	}
+
+	close(): void {
+		this.ws.close();
+	}
+}
+
 export class CdpTab {
 	private nextId = 1;
 	private readonly pending = new Map<number, { resolve: (result: any) => void; reject: (error: Error) => void }>();
@@ -73,11 +101,12 @@ export class CdpTab {
 	private loadFired: (() => void) | undefined;
 
 	private constructor(
-		private readonly ws: WebSocket,
+		private readonly channel: CdpChannel,
 		readonly targetId: string,
 		public title: string,
 	) {}
 
+	/** Opens a direct per-page socket. */
 	static async connect(wsUrl: string, targetId: string, title: string): Promise<CdpTab> {
 		const ws = new WebSocket(wsUrl);
 		try {
@@ -92,14 +121,7 @@ export class CdpTab {
 					reject(new Error(`Failed to connect to CDP target at ${wsUrl}`));
 				};
 			});
-
-			const tab = new CdpTab(ws, targetId, title);
-			ws.onmessage = (event) => tab.handleMessage(String(event.data));
-			ws.onclose = () => tab.rejectAllPending(new Error("CDP connection closed."));
-			ws.onerror = () => tab.rejectAllPending(new Error("CDP connection error."));
-			await tab.send("Runtime.enable");
-			await tab.send("Page.enable");
-			return tab;
+			return await CdpTab.attach(new WebSocketChannel(ws), targetId, title);
 		} catch (error) {
 			try {
 				ws.close();
@@ -110,8 +132,22 @@ export class CdpTab {
 		}
 	}
 
+	/**
+	 * Attaches to a channel that is already open — a direct socket, or a
+	 * session multiplexed over a relay's single browser connection.
+	 */
+	static async attach(channel: CdpChannel, targetId: string, title: string): Promise<CdpTab> {
+		const tab = new CdpTab(channel, targetId, title);
+		channel.onmessage = (event) => tab.handleMessage(String(event.data));
+		channel.onclose = () => tab.rejectAllPending(new Error("CDP connection closed."));
+		channel.onerror = () => tab.rejectAllPending(new Error("CDP connection error."));
+		await tab.send("Runtime.enable");
+		await tab.send("Page.enable");
+		return tab;
+	}
+
 	get isOpen(): boolean {
-		return this.ws.readyState === WebSocket.OPEN;
+		return this.channel.readyState === WebSocket.OPEN;
 	}
 
 	close(): void {
@@ -119,7 +155,7 @@ export class CdpTab {
 		this.loadFired = undefined;
 		this.rejectAllPending(new Error("CDP connection closed."));
 		try {
-			this.ws.close();
+			this.channel.close();
 		} catch {
 			// already closed
 		}
@@ -209,7 +245,7 @@ export class CdpTab {
 				},
 			});
 			try {
-				this.ws.send(JSON.stringify({ id, method, params }));
+				this.channel.send(JSON.stringify({ id, method, params }));
 			} catch (error) {
 				clearTimeout(timer);
 				this.pending.delete(id);
@@ -279,6 +315,59 @@ export class CdpTab {
 const connectedTabs = new Map<string, CdpTab>();
 const connectingTabs = new Map<string, Promise<CdpTab>>();
 let lastConnectFailureAt = 0;
+let relayConnectionCache: { url: string; endpoint: Promise<CdpRelayEndpoint> } | undefined;
+
+/** The multiplexing relay to drive, when one is configured. */
+function relayUrl(): string | undefined {
+	const raw = (process.env.PI_COMPUTER_USE_RELAY_URL ?? "").trim();
+	return raw.length > 0 ? raw : undefined;
+}
+
+/**
+ * The browser string the configured relay reports, once connected.
+ * Undefined when no relay is configured or it is unreachable.
+ */
+export async function relayBrowserName(): Promise<string | undefined> {
+	if (!relayUrl()) return undefined;
+	try {
+		return (await relayConnection()).browser;
+	} catch {
+		return undefined;
+	}
+}
+
+/** One shared relay connection per configured URL. */
+async function relayConnection(): Promise<CdpRelayEndpoint> {
+	const url = relayUrl();
+	if (!url) throw new Error("No relay URL is configured.");
+	if (relayConnectionCache?.url !== url) {
+		const previous = relayConnectionCache;
+		relayConnectionCache = undefined;
+		previous?.endpoint.then((endpoint) => endpoint.close()).catch(() => undefined);
+		const pending = CdpRelayEndpoint.connect(url);
+		relayConnectionCache = { url, endpoint: pending };
+		pending.catch(() => {
+			if (relayConnectionCache?.endpoint === pending) relayConnectionCache = undefined;
+		});
+	}
+	return await relayConnectionCache.endpoint;
+}
+
+/**
+ * Connects a tab: a session over the relay when one is configured, otherwise a
+ * direct socket to the page's own debugger URL.
+ */
+async function connectTab(candidate: CdpPageTarget): Promise<CdpTab> {
+	if (relayUrl()) {
+		const endpoint = await relayConnection();
+		const channel = await endpoint.openChannel(candidate.id);
+		return await CdpTab.attach(channel, candidate.id, candidate.title);
+	}
+	if (!candidate.webSocketDebuggerUrl) {
+		throw new Error(`CDP target ${candidate.id} has no debugger socket.`);
+	}
+	return await CdpTab.connect(candidate.webSocketDebuggerUrl, candidate.id, candidate.title);
+}
 
 /** Close session-owned CDP state without affecting the browser process. */
 export function disconnectCdp(): void {
@@ -286,9 +375,13 @@ export function disconnectCdp(): void {
 	connectedTabs.clear();
 	connectingTabs.clear();
 	lastConnectFailureAt = 0;
+	const relay = relayConnectionCache;
+	relayConnectionCache = undefined;
+	relay?.endpoint.then((endpoint) => endpoint.close()).catch(() => undefined);
 }
 
 function cdpEnabled(): boolean {
+	if (relayUrl()) return typeof WebSocket !== "undefined";
 	const rawPort = process.env.PI_COMPUTER_USE_CDP_PORT ?? "";
 	if (!/^\d+$/.test(rawPort)) return false;
 	const port = Number(rawPort);
@@ -322,7 +415,7 @@ export async function cdpTabForWindow(windowTitle: string, frame?: WindowFrame):
 		}
 		let connecting = connectingTabs.get(match.id);
 		if (!connecting) {
-			connecting = CdpTab.connect(match.webSocketDebuggerUrl!, match.id, match.title);
+			connecting = connectTab(match);
 			connectingTabs.set(match.id, connecting);
 		}
 		let connected: CdpTab;
@@ -387,8 +480,8 @@ export async function cdpNavigateContext(contextId: string, url: string): Promis
 
 export async function cdpEvaluateForContext(contextId: string, expression: string): Promise<CdpEvaluationResult | undefined> {
 	const page = await cdpPageForContext(contextId);
-	if (!page?.webSocketDebuggerUrl) return undefined;
-	const tab = await CdpTab.connect(page.webSocketDebuggerUrl, page.id, page.title);
+	if (!page) return undefined;
+	const tab = await connectTab(page);
 	try {
 		return { contextId, value: await tab.evaluate(expression) };
 	} finally {
@@ -398,9 +491,9 @@ export async function cdpEvaluateForContext(contextId: string, expression: strin
 
 export async function cdpSnapshotForContext(contextId: string): Promise<CdpPageSnapshot | undefined> {
 	const page = await cdpPageForContext(contextId);
-	if (!page?.webSocketDebuggerUrl) return undefined;
+	if (!page) return undefined;
 
-	const tab = await CdpTab.connect(page.webSocketDebuggerUrl, page.id, page.title);
+	const tab = await connectTab(page);
 	try {
 		const [textValue, nodes] = await Promise.all([
 			tab.evaluate("document.body ? document.body.innerText : ''").catch(() => ""),
@@ -427,8 +520,8 @@ export async function cdpSnapshotForContext(contextId: string): Promise<CdpPageS
 
 async function withCdpContextTab<T>(contextId: string, run: (tab: CdpTab) => Promise<T>): Promise<T | undefined> {
 	const page = await cdpPageForContext(contextId);
-	if (!page?.webSocketDebuggerUrl) return undefined;
-	const tab = await CdpTab.connect(page.webSocketDebuggerUrl, page.id, page.title);
+	if (!page) return undefined;
+	const tab = await connectTab(page);
 	try {
 		return await run(tab);
 	} finally {
@@ -445,6 +538,17 @@ async function cdpPageForContext(contextId: string): Promise<CdpPageTarget | und
 
 async function cdpPages(): Promise<CdpPageTarget[]> {
 	if (!cdpEnabled()) return [];
+	if (relayUrl()) {
+		// The relay lists its pages over HTTP; page sockets are session-scoped
+		// on one browser connection, so no per-page debugger URL exists.
+		const endpoint = await relayConnection();
+		return (await endpoint.listTargets()).map((target) => ({
+			id: target.id,
+			type: "page",
+			title: target.title,
+			url: target.url,
+		}));
+	}
 	const port = process.env.PI_COMPUTER_USE_CDP_PORT;
 	const response = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(2_000) });
 	const targets = (await response.json()) as CdpPageTarget[];
@@ -576,7 +680,7 @@ async function pickTab(pages: CdpPageTarget[], windowTitle: string, frame?: Wind
 	let visibleFallback: CdpPageTarget | undefined;
 	for (const candidate of pool) {
 		try {
-			const tab = await CdpTab.connect(candidate.webSocketDebuggerUrl!, candidate.id, candidate.title);
+			const tab = await connectTab(candidate);
 			const inFrame = await tabMatchesFrame(tab, frame, false);
 			const visibility = await tab.evaluate("document.visibilityState").catch(() => undefined);
 			tab.close();

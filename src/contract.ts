@@ -125,6 +125,11 @@ export interface RunShortcutParams {
 	timeoutMs?: number;
 }
 
+export interface BrowserAttachParams {
+	/** Relay HTTP endpoint; defaults to the local omp relay. */
+	url?: string;
+}
+
 export const AGENT_TOOL_NAMES = new Set([
 	"find_roots",
 	"read_text",
@@ -140,4 +145,5 @@ export const AGENT_TOOL_NAMES = new Set([
 	"app_control",
 	"run_script",
 	"run_shortcut",
+	"browser_attach",
 ]);

@@ -7,12 +7,12 @@ import os from "node:os";
 import path from "node:path";
 import type { AgentToolResult, AgentToolUpdateCallback, HostContext } from "./host.ts";
 import { canRetryInForeground, outcomeAfterCheck, outcomeAfterObservedValues, prepareAction, type ActionState, type PreparedAction } from "./actions.ts";
-import { cdpClickForContext, cdpEvaluateForContext, cdpNavigateContext, cdpScrollForContext, cdpSnapshotForContext, cdpTabForWindow, cdpTypeForContext, disconnectCdp, listCdpPageContexts, type CdpConsoleEntry, type CdpPageSnapshot } from "./cdp.ts";
+import { cdpClickForContext, cdpEvaluateForContext, cdpNavigateContext, cdpScrollForContext, cdpSnapshotForContext, cdpTabForWindow, cdpTypeForContext, disconnectCdp, listCdpPageContexts, relayBrowserName, type CdpConsoleEntry, type CdpPageSnapshot } from "./cdp.ts";
 import { appControl, runScript, runShortcut } from "./adapters.ts";
 import { getComputerUseConfig, isBrowserUseEnabled, isHeadlessMode, loadComputerUseConfig } from "./config.ts";
 import { noteAfterAct, noteFromLook, noteRegionKeyForRef, renderNote, type WindowNote } from "./note.ts";
 import { foldToBudget, graftScopedOutline, nodeByRef, outlineNodeLabel, outlineNodePath, restoreOutline, searchOutline, serializeOutline, serializeOutlineNode, type LookResponse, type Outline, type OutlineChange, type OutlineNode, type OutlineSearchMatch, type SerializedOutline, type SerializedOutlineNode } from "./outline.ts";
-import { AGENT_TOOL_NAMES, type ActParams, type AppControlParams, type EvaluateBrowserParams, type ExpandUiParams, type ImageMode, type InspectUiParams, type LaunchBrowserParams, type FindParams, type MouseButtonName, type NavigateBrowserParams, type ObserveParams, type ObserveTargetParams, type ReadTextParams, type RootSelector, type RunScriptParams, type RunShortcutParams, type SearchUiParams, type StateTargetParams, type UiAction, type WaitForParams } from "./contract.ts";
+import { AGENT_TOOL_NAMES, type ActParams, type AppControlParams, type BrowserAttachParams, type EvaluateBrowserParams, type ExpandUiParams, type ImageMode, type InspectUiParams, type LaunchBrowserParams, type FindParams, type MouseButtonName, type NavigateBrowserParams, type ObserveParams, type ObserveTargetParams, type ReadTextParams, type RootSelector, type RunScriptParams, type RunShortcutParams, type SearchUiParams, type StateTargetParams, type UiAction, type WaitForParams } from "./contract.ts";
 import { toFiniteNumber } from "./platform/coerce.ts";
 import { currentPlatformBackend } from "./platform/index.ts";
 import type { FramePoints, HelperActPerformed, HelperActResult, NativeInputDelivery, PlatformActRequest, PlatformApp as HelperApp, PlatformDiagnostics, PlatformFrontmostResult as FrontmostResult, PlatformRoot as HelperWindow } from "./platform/types.ts";
@@ -2154,6 +2154,54 @@ async function performLaunchBrowser(params: LaunchBrowserParams, signal?: AbortS
 	return { content: [{ type: "text", text: `Launched ${browser} with CDP on port ${port}. Observe a returned @r root.\n${lines.join("\n")}` }], details };
 }
 
+/**
+ * Where the omp browser relay listens by default. Other relays take an
+ * explicit url.
+ */
+const DEFAULT_RELAY_URL = "http://127.0.0.1:9224";
+
+interface BrowserAttachDetails {
+	tool: "browser_attach";
+	url: string;
+	browser?: string;
+	roots: Array<{ ref: string; kind: "browser_page"; title: string; url: string }>;
+}
+
+/**
+ * Points the session's browser surface at a multiplexing relay endpoint, which
+ * is how the user's own signed-in browser becomes drivable: it exposes CDP over
+ * one browser socket and routes page commands by session.
+ *
+ * The endpoint is verified before success is reported, so a wrong URL cannot
+ * silently leave the session pointed at nothing.
+ */
+async function performBrowserAttach(params: BrowserAttachParams, signal?: AbortSignal): Promise<AgentToolResult<BrowserAttachDetails>> {
+	throwIfAborted(signal);
+	if (!isBrowserUseEnabled()) throw new Error("Browser use is disabled in the computer-use configuration.");
+	const url = trimOrUndefined(params.url) ?? DEFAULT_RELAY_URL;
+	const previous = process.env.PI_COMPUTER_USE_RELAY_URL;
+	process.env.PI_COMPUTER_USE_RELAY_URL = url;
+	try {
+		disconnectCdp();
+		const pages = await listCdpPageContexts();
+		const browser = await relayBrowserName();
+		const roots = pages.map((page) => ({ ref: storeBrowserRootRef(page.contextId), kind: "browser_page" as const, title: page.title, url: page.url }));
+		const details: BrowserAttachDetails = { tool: "browser_attach", url, browser, roots };
+		const lines = roots.length === 0
+			? "The relay reported no open pages."
+			: roots.map((root) => `- ${root.ref} browser_page ${JSON.stringify(root.title)}${root.url ? ` — ${root.url}` : ""}`).join("\n");
+		return {
+			content: [{ type: "text", text: `Attached to ${browser ?? "the relay"} at ${url}. Observe a returned @r root; find_roots also lists these pages.\n${lines}` }],
+			details,
+		};
+	} catch (error) {
+		if (previous === undefined) delete process.env.PI_COMPUTER_USE_RELAY_URL;
+		else process.env.PI_COMPUTER_USE_RELAY_URL = previous;
+		disconnectCdp();
+		throw error;
+	}
+}
+
 async function performNavigateBrowser(params: NavigateBrowserParams, signal?: AbortSignal): Promise<AgentToolResult<ComputerUseDetails | BrowserObservationDetails>> {
 	const contextId = browserContextForOperation();
 	const url = trimOrUndefined(params.url);
@@ -2502,6 +2550,7 @@ export const executeAct = makeToolExecutor<ActParams, ComputerUseDetails | Brows
 export const executeNavigateBrowser = makeToolExecutor(performNavigateBrowser);
 export const executeEvaluateBrowser = makeToolExecutor(performEvaluateBrowser);
 export const executeLaunchBrowser = makeToolExecutor(performLaunchBrowser);
+export const executeBrowserAttach = makeToolExecutor(performBrowserAttach);
 export const executeAppControl = makeAdapterExecutor(performAppControl);
 export const executeRunScript = makeAdapterExecutor(performRunScript);
 export const executeRunShortcut = makeAdapterExecutor(performRunShortcut);

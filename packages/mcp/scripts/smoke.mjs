@@ -31,6 +31,7 @@ const EXPECTED_TOOLS = [
 	"read_text",
 	"wait_for",
 	"launch_browser",
+	"browser_attach",
 	"navigate_browser",
 	"evaluate_browser",
 	"app_control",
@@ -214,7 +215,7 @@ try {
 	const scriptedValue = scripted.details.value;
 	check(
 		"run_code dispatches back into the tool surface",
-		!scripted.isError && scriptedValue?.rootCount > 0 && scriptedValue?.tools === 15,
+		!scripted.isError && scriptedValue?.rootCount > 0 && scriptedValue?.tools === 16,
 		JSON.stringify(scriptedValue ?? scripted.text).slice(0, 160),
 	);
 	check(
@@ -228,6 +229,41 @@ try {
 		scriptError.isError && /boom/.test(scriptError.text),
 		scriptError.text.slice(0, 120),
 	);
+
+	// --- real browser through a relay --------------------------------
+	// Tolerant when no relay is running, strict when one is: this is the path
+	// that drives the user's own signed-in browser rather than a clean profile.
+	const attach = await call("browser_attach", {});
+	if (attach.isError) {
+		console.log(`SKIP relay browser checks (no relay reachable: ${attach.text.slice(0, 90)})`);
+	} else {
+		check(
+			"browser_attach reports the relay browser and its pages",
+			typeof attach.details.browser === "string" && Array.isArray(attach.details.roots),
+			JSON.stringify(attach.details).slice(0, 160),
+		);
+		const page = (attach.details.roots ?? [])[0];
+		if (!page) {
+			console.log("SKIP relay page checks (the relay reported no open pages)");
+		} else {
+			const observed = await call("observe_ui", { root: page.ref, image: "never" });
+			const browserStateId = observed.details.stateId;
+			check(
+				"observe_ui reads a page from the real browser",
+				!observed.isError && typeof browserStateId === "string",
+				(observed.details.renderedOutline ?? observed.text).slice(0, 140),
+			);
+			const evaluated = await call("evaluate_browser", {
+				stateId: browserStateId,
+				expression: "({host: location.host, title: document.title})",
+			});
+			check(
+				"evaluate_browser runs JavaScript in the real page",
+				!evaluated.isError && typeof evaluated.details.value?.host === "string",
+				JSON.stringify(evaluated.details.value ?? evaluated.text).slice(0, 160),
+			);
+		}
+	}
 
 	// --- live write path -------------------------------------------------
 	if (live) {
