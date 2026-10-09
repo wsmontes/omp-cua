@@ -1,4 +1,4 @@
-import type { ExtensionContext } from "@oh-my-pi/pi-coding-agent";
+import type { HostContext } from "./host.ts";
 
 // Which process identity the permission answers reflect. Platforms may
 // attribute grants to a responsible parent process rather than the helper
@@ -65,7 +65,7 @@ function missingKinds(status: PermissionStatus, kinds: PermissionKindCopy[]): Pe
 }
 
 export async function ensurePermissions(
-	ctx: ExtensionContext,
+	ctx: HostContext,
 	bridge: PermissionBridge,
 	helperPath: string,
 	signal?: AbortSignal,

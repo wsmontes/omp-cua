@@ -1,4 +1,4 @@
-import type { ExtensionContext } from "@oh-my-pi/pi-coding-agent";
+import type { HostContext } from "../host.ts";
 import type { LookResponse } from "../outline.ts";
 import type { PermissionStatus } from "../permissions.ts";
 
@@ -203,7 +203,7 @@ export interface ComputerUsePlatformBackend {
 	name: PlatformName;
 	/** Release process-local resources when the OMP session is torn down. */
 	shutdown?(): void | Promise<void>;
-	ensureReady(ctx: ExtensionContext, state: PlatformReadyState, signal?: AbortSignal): Promise<PlatformReadyState>;
+	ensureReady(ctx: HostContext, state: PlatformReadyState, signal?: AbortSignal): Promise<PlatformReadyState>;
 	listApps(signal?: AbortSignal): Promise<PlatformApp[]>;
 	listRoots(query: PlatformRootQuery, signal?: AbortSignal): Promise<PlatformRoot[]>;
 	getFrontmost(signal?: AbortSignal): Promise<PlatformFrontmostResult>;

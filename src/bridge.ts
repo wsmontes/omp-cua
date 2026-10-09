@@ -5,7 +5,7 @@ import { access } from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import type { AgentToolResult, AgentToolUpdateCallback, ExtensionContext } from "@oh-my-pi/pi-coding-agent";
+import type { AgentToolResult, AgentToolUpdateCallback, HostContext } from "./host.ts";
 import { canRetryInForeground, outcomeAfterCheck, outcomeAfterObservedValues, prepareAction, type ActionState, type PreparedAction } from "./actions.ts";
 import { cdpClickForContext, cdpEvaluateForContext, cdpNavigateContext, cdpScrollForContext, cdpSnapshotForContext, cdpTabForWindow, cdpTypeForContext, disconnectCdp, listCdpPageContexts, type CdpConsoleEntry, type CdpPageSnapshot } from "./cdp.ts";
 import { getComputerUseConfig, isBrowserUseEnabled, isHeadlessMode, loadComputerUseConfig } from "./config.ts";
@@ -552,7 +552,7 @@ async function isExecutable(filePath: string): Promise<boolean> {
 	}
 }
 
-async function performEnsureReady(ctx: ExtensionContext, signal?: AbortSignal): Promise<void> {
+async function performEnsureReady(ctx: HostContext, signal?: AbortSignal): Promise<void> {
 	loadComputerUseConfig(ctx.cwd);
 
 	throwIfAborted(signal);
@@ -570,7 +570,7 @@ async function performEnsureReady(ctx: ExtensionContext, signal?: AbortSignal): 
 	runtimeState.helperDiagnostics = ready.helperDiagnostics;
 }
 
-async function ensureReady(ctx: ExtensionContext, signal?: AbortSignal): Promise<void> {
+async function ensureReady(ctx: HostContext, signal?: AbortSignal): Promise<void> {
 	if (readiness) return await readiness;
 	const pending = performEnsureReady(ctx, signal);
 	readiness = pending;
@@ -2253,7 +2253,7 @@ async function performEvaluateBrowser(params: EvaluateBrowserParams): Promise<Ag
 	});
 }
 
-async function executeTool<P, T>(ctx: ExtensionContext, params: P, signal: AbortSignal | undefined, run: () => Promise<T>): Promise<T> {
+async function executeTool<P, T>(ctx: HostContext, params: P, signal: AbortSignal | undefined, run: () => Promise<T>): Promise<T> {
 	const requestedStateId = trimOrUndefined((params as { stateId?: string } | undefined)?.stateId);
 	const stateRecord = requestedStateId ? savedStates.get(requestedStateId) : undefined;
 	if (requestedStateId && !stateRecord) {
@@ -2275,7 +2275,7 @@ function makeToolExecutor<P, D>(perform: (params: P, signal?: AbortSignal) => Pr
 		params: P,
 		signal: AbortSignal | undefined,
 		_onUpdate: AgentToolUpdateCallback<D> | undefined,
-		ctx: ExtensionContext,
+		ctx: HostContext,
 	): Promise<AgentToolResult<D>> => await executeTool(ctx, params, signal, () => perform(params, signal));
 }
 
@@ -2291,7 +2291,7 @@ export const executeNavigateBrowser = makeToolExecutor(performNavigateBrowser);
 export const executeEvaluateBrowser = makeToolExecutor(performEvaluateBrowser);
 export const executeLaunchBrowser = makeToolExecutor(performLaunchBrowser);
 
-export function reconstructStateFromBranch(ctx: ExtensionContext): void {
+export function reconstructStateFromBranch(ctx: HostContext): void {
 	savedStates.clear();
 	runtimeState.windowRefs.clear();
 	runtimeState.windowRefByIdentity.clear();

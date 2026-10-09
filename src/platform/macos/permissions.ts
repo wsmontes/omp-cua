@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import type { ExtensionContext } from "@oh-my-pi/pi-coding-agent";
+import type { HostContext } from "../../host.ts";
 import { ensurePermissions, type PermissionKind, type PermissionStatus } from "../../permissions.ts";
 import { toBoolean, toFiniteNumber, toOptionalString } from "../coerce.ts";
 import type { PlatformReadyState } from "../types.ts";
@@ -102,7 +102,7 @@ async function registerPermissions(signal?: AbortSignal): Promise<void> {
 }
 
 export async function ensureMacosReady(
-	ctx: ExtensionContext,
+	ctx: HostContext,
 	state: PlatformReadyState,
 	signal?: AbortSignal,
 ): Promise<PlatformReadyState> {

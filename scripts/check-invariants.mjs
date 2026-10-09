@@ -12,6 +12,11 @@ const ts = fs.readFileSync(path.join(root, "src/bridge.ts"), "utf8");
 const noteTs = fs.readFileSync(path.join(root, "src/note.ts"), "utf8");
 const configTs = fs.readFileSync(path.join(root, "src/config.ts"), "utf8");
 const setupHelper = fs.readFileSync(path.join(root, "scripts/setup-helper.mjs"), "utf8");
+// The agent-facing contract is authored in src/tools.ts and registered by the
+// extension. INV-11/15/18 assert against both, wherever the split lands.
+const toolSurface = ["extensions/computer-use.ts", "src/tools.ts"]
+	.map((file) => fs.readFileSync(path.join(root, file), "utf8"))
+	.join("\n");
 const srcFiles = fs.readdirSync(path.join(root, "src"), { recursive: true })
 	.filter((file) => typeof file === "string" && file.endsWith(".ts"))
 	.map((file) => [file, fs.readFileSync(path.join(root, "src", file), "utf8")]);
@@ -146,7 +151,7 @@ check("INV-10 resource-keyed scheduling", () => {
 });
 
 check("INV-11 unified agent contract", () => {
-	const extension = fs.readFileSync(path.join(root, "extensions/computer-use.ts"), "utf8");
+	const extension = toolSurface;
 	const tools = [...extension.matchAll(/\bname:\s*"([^"]+)"/g)].map((match) => match[1]);
 	const expected = ["find_roots", "observe_ui", "search_ui", "expand_ui", "inspect_ui", "act_ui", "read_text", "wait_for", "launch_browser", "navigate_browser", "evaluate_browser"];
 	assert(JSON.stringify(tools) === JSON.stringify(expected), `unexpected public tool surface: ${tools.join(", ")}`);
@@ -172,7 +177,7 @@ check("INV-14 native batches settle once", () => {
 });
 
 check("INV-15 semantic action postconditions", () => {
-	const extension = fs.readFileSync(path.join(root, "extensions/computer-use.ts"), "utf8");
+	const extension = toolSurface;
 	const actions = fs.readFileSync(path.join(root, "src/actions.ts"), "utf8");
 	const swift = fs.readFileSync(path.join(root, "native/macos/bridge.swift"), "utf8");
 	assert(extension.includes("expect: Type.Optional") && extension.includes("timeoutMs"), "act_ui does not expose a semantic postcondition");
@@ -201,7 +206,7 @@ check("INV-18 consolidated actions and diff-first resulting views", () => {
 	const actions = fs.readFileSync(path.join(root, "src/actions.ts"), "utf8");
 	const view = fs.readFileSync(path.join(root, "src/view.ts"), "utf8");
 	const macBackend = fs.readFileSync(path.join(root, "src/platform/macos/backend.ts"), "utf8");
-	const extension = fs.readFileSync(path.join(root, "extensions/computer-use.ts"), "utf8");
+	const extension = toolSurface;
 	assert(actions.includes("prepareAction") && actions.includes("canRetryInForeground"), "action preparation and safe recovery are not consolidated");
 	assert(!fs.existsSync(path.join(root, "src/interaction.ts")), "superseded interaction policy module still exists");
 	assert(!ts.includes("responseMode") && !extension.includes("responseMode"), "alternate confirmation-only action path still exists");

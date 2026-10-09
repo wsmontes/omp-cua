@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { getAgentDir } from "@oh-my-pi/pi-coding-agent";
+import { getAgentDir } from "./host.ts";
 
 export interface ComputerUseConfig {
 	browser_use: boolean;
