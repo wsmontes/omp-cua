@@ -1,0 +1,8 @@
+{
+	"mcpServers": {
+		"cua": {
+			"command": "/opt/homebrew/bin/bun",
+			"args": ["/Users/wagnermontes/Documents/GitHub/omp-cua/packages/mcp/src/main.ts"]
+		}
+	}
+}

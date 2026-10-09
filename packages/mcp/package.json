@@ -1,0 +1,18 @@
+{
+	"name": "@cua/mcp",
+	"private": true,
+	"type": "module",
+	"description": "MCP frontend over the computer-use core (macOS AX/ScreenCaptureKit + CDP).",
+	"bin": {
+		"cua-mcp": "./src/main.ts"
+	},
+	"scripts": {
+		"start": "bun src/main.ts",
+		"list": "bun src/main.ts --list",
+		"smoke": "bun scripts/smoke.mjs"
+	},
+	"dependencies": {
+		"@modelcontextprotocol/sdk": "^1.32.1",
+		"ajv": "^8.17.1"
+	}
+}

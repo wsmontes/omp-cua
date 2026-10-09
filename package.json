@@ -63,7 +63,11 @@
 		"test:platform": "bun scripts/check-platform-windows.mjs",
 		"test:windows-scripts": "bun scripts/check-windows-build-scripts.mjs",
 		"test:signing": "bun scripts/check-local-signing.mjs",
-		"test": "bun run typecheck && bun run test:schema && bun run test:omp && bun run test:lifecycle && bun run test:runtime && bun run test:invariants && bun run test:signing",
+		"test:mcp-parity": "bun packages/mcp/scripts/check-schema-parity.mjs",
+		"test:mcp-smoke": "bun packages/mcp/scripts/smoke.mjs",
+		"test:mcp-smoke:live": "CUA_SMOKE_LIVE=1 bun packages/mcp/scripts/smoke.mjs",
+		"mcp": "bun packages/mcp/src/main.ts",
+		"test": "bun run typecheck && bun run test:schema && bun run test:omp && bun run test:lifecycle && bun run test:runtime && bun run test:invariants && bun run test:signing && bun run test:mcp-parity",
 		"build:native": "bun scripts/build-native.mjs",
 		"build:windows": "bun scripts/build-native.mjs --platform windows"
 	},
