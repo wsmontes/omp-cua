@@ -8,10 +8,11 @@ import path from "node:path";
 import type { AgentToolResult, AgentToolUpdateCallback, HostContext } from "./host.ts";
 import { canRetryInForeground, outcomeAfterCheck, outcomeAfterObservedValues, prepareAction, type ActionState, type PreparedAction } from "./actions.ts";
 import { cdpClickForContext, cdpEvaluateForContext, cdpNavigateContext, cdpScrollForContext, cdpSnapshotForContext, cdpTabForWindow, cdpTypeForContext, disconnectCdp, listCdpPageContexts, type CdpConsoleEntry, type CdpPageSnapshot } from "./cdp.ts";
+import { appControl, runScript, runShortcut } from "./adapters.ts";
 import { getComputerUseConfig, isBrowserUseEnabled, isHeadlessMode, loadComputerUseConfig } from "./config.ts";
 import { noteAfterAct, noteFromLook, noteRegionKeyForRef, renderNote, type WindowNote } from "./note.ts";
 import { foldToBudget, graftScopedOutline, nodeByRef, outlineNodeLabel, outlineNodePath, restoreOutline, searchOutline, serializeOutline, serializeOutlineNode, type LookResponse, type Outline, type OutlineChange, type OutlineNode, type OutlineSearchMatch, type SerializedOutline, type SerializedOutlineNode } from "./outline.ts";
-import { AGENT_TOOL_NAMES, type ActParams, type EvaluateBrowserParams, type ExpandUiParams, type ImageMode, type InspectUiParams, type LaunchBrowserParams, type FindParams, type MouseButtonName, type NavigateBrowserParams, type ObserveParams, type ObserveTargetParams, type ReadTextParams, type RootSelector, type SearchUiParams, type StateTargetParams, type UiAction, type WaitForParams } from "./contract.ts";
+import { AGENT_TOOL_NAMES, type ActParams, type AppControlParams, type EvaluateBrowserParams, type ExpandUiParams, type ImageMode, type InspectUiParams, type LaunchBrowserParams, type FindParams, type MouseButtonName, type NavigateBrowserParams, type ObserveParams, type ObserveTargetParams, type ReadTextParams, type RootSelector, type RunScriptParams, type RunShortcutParams, type SearchUiParams, type StateTargetParams, type UiAction, type WaitForParams } from "./contract.ts";
 import { toFiniteNumber } from "./platform/coerce.ts";
 import { currentPlatformBackend } from "./platform/index.ts";
 import type { FramePoints, HelperActPerformed, HelperActResult, NativeInputDelivery, PlatformActRequest, PlatformApp as HelperApp, PlatformDiagnostics, PlatformFrontmostResult as FrontmostResult, PlatformRoot as HelperWindow } from "./platform/types.ts";
@@ -2253,6 +2254,217 @@ async function performEvaluateBrowser(params: EvaluateBrowserParams): Promise<Ag
 	});
 }
 
+interface AppControlDetails {
+	tool: "app_control";
+	action: AppControlParams["action"];
+	target: string;
+	pid?: number;
+	/** quit only: the app was still running after the request, usually blocked on a prompt. */
+	stillRunning?: boolean;
+	stdout: string;
+	stderr: string;
+	exitCode: number;
+}
+
+interface RunScriptDetails {
+	tool: "run_script";
+	language: "applescript" | "javascript";
+	stdout: string;
+	stderr: string;
+	exitCode: number;
+	timedOut: boolean;
+}
+
+interface RunShortcutDetails {
+	tool: "run_shortcut";
+	action: "run" | "list";
+	name?: string;
+	stdout: string;
+	stderr: string;
+	exitCode: number;
+	timedOut: boolean;
+}
+
+function adapterText(summary: string, stdout: string, stderr: string): string {
+	const parts = [summary];
+	if (stdout.trim().length > 0) parts.push(stdout.trimEnd());
+	if (stderr.trim().length > 0) parts.push(stderr.trimEnd());
+	return parts.join("\n");
+}
+
+/**
+ * How long to wait for a launched application to appear in the running-app
+ * list. A cold LaunchServices start can take several seconds before the app is
+ * listed, and the pid is only a convenience on top of a successful launch.
+ */
+const LAUNCH_PID_WINDOW_MS = 12_000;
+
+/** True when a running app corresponds to the request's selector. */
+function appMatchesSelector(app: HelperApp, params: AppControlParams, loose: boolean): boolean {
+	const bundle = trimOrUndefined(params.bundleId);
+	const name = trimOrUndefined(params.app)?.toLowerCase();
+	const appName = (app.appName ?? "").toLowerCase();
+	if (bundle) {
+		if (app.bundleId === bundle) return true;
+		return loose && name !== undefined && appName.includes(name);
+	}
+	if (name === undefined) return false;
+	return loose ? appName.includes(name) : appName === name;
+}
+
+/** Resolves a running app's pid by bundle id first, then by name. */
+async function findAppPid(params: AppControlParams, timeoutMs: number, signal?: AbortSignal): Promise<number | undefined> {
+	if (!trimOrUndefined(params.bundleId) && !trimOrUndefined(params.app)) return undefined;
+	const deadline = Date.now() + timeoutMs;
+	for (;;) {
+		const apps = await currentPlatformBackend.listApps(signal);
+		const match =
+			apps.find((app) => appMatchesSelector(app, params, false)) ??
+			apps.find((app) => appMatchesSelector(app, params, true));
+		if (match) return match.pid;
+		if (Date.now() >= deadline) return undefined;
+		await sleep(250, signal);
+	}
+}
+
+async function performAppControl(params: AppControlParams, signal?: AbortSignal): Promise<AgentToolResult<AppControlDetails>> {
+	throwIfAborted(signal);
+	const app = trimOrUndefined(params.app);
+	const bundleId = trimOrUndefined(params.bundleId);
+	const helperPath = trimOrUndefined(params.path);
+	const target = helperPath ?? bundleId ?? app;
+	if (!target) throw new Error("app_control requires one of app, bundleId, or path.");
+
+	if (params.action === "quit" && params.force === true) {
+		const pid = await findAppPid(params, 0, signal);
+		if (pid === undefined) throw new Error(`No running process matched '${target}'.`);
+		process.kill(pid, "SIGTERM");
+		const details: AppControlDetails = {
+			tool: "app_control",
+			action: "quit",
+			target,
+			pid,
+			stdout: `Sent SIGTERM to ${target} (pid ${pid}).`,
+			stderr: "",
+			exitCode: 0,
+		};
+		return { content: [{ type: "text", text: details.stdout }], details };
+	}
+
+	const result = await appControl(
+		{ action: params.action, app, bundleId, path: helperPath, args: params.args, newInstance: params.newInstance },
+		{ timeoutMs: 20_000 },
+	);
+	throwIfAborted(signal);
+	const pid = result.exitCode === 0 && params.action !== "quit"
+		? await findAppPid(params, LAUNCH_PID_WINDOW_MS, signal)
+		: undefined;
+	// A graceful quit can be blocked by the application's own unsaved-work
+	// prompt, which is invisible to the caller unless it is reported.
+	let stillRunning: boolean | undefined;
+	if (result.exitCode === 0 && params.action === "quit") {
+		await sleep(400, signal);
+		stillRunning = (await currentPlatformBackend.listApps(signal)).some((app) =>
+			appMatchesSelector(app, params, false),
+		);
+	}
+	const details: AppControlDetails = {
+		tool: "app_control",
+		action: params.action,
+		target,
+		pid,
+		stillRunning,
+		stdout: result.stdout,
+		stderr: result.stderr,
+		exitCode: result.exitCode,
+	};
+	const summary = result.exitCode !== 0
+		? `${params.action} ${target} failed with exit code ${result.exitCode}`
+		: stillRunning === true
+			? `quit ${target} was requested but the app is still running; it is most likely waiting on its own unsaved-work prompt. Use force to terminate it.`
+			: `${params.action} ${target}${pid === undefined ? "" : ` (pid ${pid})`}`;
+	return {
+		content: [{ type: "text", text: adapterText(summary, result.stdout, result.stderr) }],
+		details,
+		isError: result.exitCode !== 0,
+	};
+}
+
+async function performRunScript(params: RunScriptParams, signal?: AbortSignal): Promise<AgentToolResult<RunScriptDetails>> {
+	throwIfAborted(signal);
+	if (typeof params.source !== "string" || params.source.trim().length === 0) {
+		throw new Error("run_script requires a non-empty source.");
+	}
+	const result = await runScript({ language: params.language, source: params.source, timeoutMs: params.timeoutMs });
+	throwIfAborted(signal);
+	const details: RunScriptDetails = {
+		tool: "run_script",
+		language: result.language,
+		stdout: result.stdout,
+		stderr: result.stderr,
+		exitCode: result.exitCode,
+		timedOut: result.timedOut,
+	};
+	const summary = result.timedOut
+		? `run_script timed out after ${params.timeoutMs ?? 30_000}ms`
+		: result.exitCode === 0
+			? `${result.language} script completed`
+			: `${result.language} script failed with exit code ${result.exitCode}`;
+	return {
+		content: [{ type: "text", text: adapterText(summary, result.stdout, result.stderr) }],
+		details,
+		isError: result.exitCode !== 0 || result.timedOut,
+	};
+}
+
+async function performRunShortcut(params: RunShortcutParams, signal?: AbortSignal): Promise<AgentToolResult<RunShortcutDetails>> {
+	throwIfAborted(signal);
+	const result = await runShortcut({
+		action: params.action,
+		name: params.name,
+		input: params.input,
+		timeoutMs: params.timeoutMs,
+	});
+	throwIfAborted(signal);
+	const details: RunShortcutDetails = {
+		tool: "run_shortcut",
+		action: result.action,
+		name: result.name,
+		stdout: result.stdout,
+		stderr: result.stderr,
+		exitCode: result.exitCode,
+		timedOut: result.timedOut,
+	};
+	const summary = result.timedOut
+		? `run_shortcut timed out after ${params.timeoutMs ?? 60_000}ms`
+		: result.exitCode === 0
+			? `shortcut ${result.action === "list" ? "listing" : `"${result.name}"`} completed`
+			: `shortcut ${result.action} failed with exit code ${result.exitCode}`;
+	return {
+		content: [{ type: "text", text: adapterText(summary, result.stdout, result.stderr) }],
+		details,
+		isError: result.exitCode !== 0 || result.timedOut,
+	};
+}
+
+/**
+ * Adapters deliberately skip the accessibility readiness gate that
+ * `makeToolExecutor` applies: AppleScript and Shortcuts are the routes that
+ * keep working when the AX helper is unavailable, so gating them behind it
+ * would invert the router's order.
+ */
+function makeAdapterExecutor<P, D>(
+	perform: (params: P, signal?: AbortSignal) => Promise<AgentToolResult<D>>,
+) {
+	return async (
+		_toolCallId: string,
+		params: P,
+		signal: AbortSignal | undefined,
+		_onUpdate: AgentToolUpdateCallback<D> | undefined,
+		_ctx: HostContext,
+	): Promise<AgentToolResult<D>> => await perform(params, signal);
+}
+
 async function executeTool<P, T>(ctx: HostContext, params: P, signal: AbortSignal | undefined, run: () => Promise<T>): Promise<T> {
 	const requestedStateId = trimOrUndefined((params as { stateId?: string } | undefined)?.stateId);
 	const stateRecord = requestedStateId ? savedStates.get(requestedStateId) : undefined;
@@ -2290,6 +2502,9 @@ export const executeAct = makeToolExecutor<ActParams, ComputerUseDetails | Brows
 export const executeNavigateBrowser = makeToolExecutor(performNavigateBrowser);
 export const executeEvaluateBrowser = makeToolExecutor(performEvaluateBrowser);
 export const executeLaunchBrowser = makeToolExecutor(performLaunchBrowser);
+export const executeAppControl = makeAdapterExecutor(performAppControl);
+export const executeRunScript = makeAdapterExecutor(performRunScript);
+export const executeRunShortcut = makeAdapterExecutor(performRunShortcut);
 
 export function reconstructStateFromBranch(ctx: HostContext): void {
 	savedStates.clear();

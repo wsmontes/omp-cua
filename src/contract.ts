@@ -102,6 +102,29 @@ export interface WaitForParams extends StateTargetParams {
 	timeoutMs?: number;
 }
 
+export interface AppControlParams {
+	action: "launch" | "activate" | "quit";
+	app?: string;
+	bundleId?: string;
+	path?: string;
+	args?: string[];
+	newInstance?: boolean;
+	force?: boolean;
+}
+
+export interface RunScriptParams {
+	language?: "applescript" | "javascript";
+	source: string;
+	timeoutMs?: number;
+}
+
+export interface RunShortcutParams {
+	action?: "run" | "list";
+	name?: string;
+	input?: string;
+	timeoutMs?: number;
+}
+
 export const AGENT_TOOL_NAMES = new Set([
 	"find_roots",
 	"read_text",
@@ -114,4 +137,7 @@ export const AGENT_TOOL_NAMES = new Set([
 	"navigate_browser",
 	"evaluate_browser",
 	"launch_browser",
+	"app_control",
+	"run_script",
+	"run_shortcut",
 ]);

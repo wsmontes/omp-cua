@@ -11,6 +11,7 @@
  */
 import {
 	executeAct,
+	executeAppControl,
 	executeEvaluateBrowser,
 	executeExpandUi,
 	executeFind,
@@ -19,6 +20,8 @@ import {
 	executeNavigateBrowser,
 	executeObserve,
 	executeReadText,
+	executeRunScript,
+	executeRunShortcut,
 	executeSearchUi,
 	executeWaitFor,
 } from "./bridge.ts";
@@ -380,6 +383,87 @@ export function buildToolDefinitions<S extends JsonSchema = JsonSchema>(
 			approval: "exec",
 			parameters: Type.Object({ stateId, expression: Type.String() }),
 			execute: executeEvaluateBrowser,
+		},
+		{
+			name: "app_control",
+			label: "App Control",
+			description:
+				"Launch, activate, or quit an application by name, bundle id, or path. Prefer this over driving the UI to start a program. launch opens the app without stealing focus; activate brings it forward; quit asks the app to close through AppleScript so it can run its own save flow, while force terminates the process and can lose unsaved work. macOS only.",
+			approval: "write",
+			parameters: Type.Object({
+				action: Type.Union([
+					Type.Literal("launch"),
+					Type.Literal("activate"),
+					Type.Literal("quit"),
+				]),
+				app: Type.Optional(
+					Type.String({ description: "Application name, e.g. TextEdit" }),
+				),
+				bundleId: Type.Optional(
+					Type.String({ description: "Bundle id, e.g. com.apple.TextEdit" }),
+				),
+				path: Type.Optional(
+					Type.String({ description: "Path to a bundle or executable" }),
+				),
+				args: Type.Optional(
+					Type.Array(Type.String(), {
+						description: "Arguments passed to the launched application",
+					}),
+				),
+				newInstance: Type.Optional(
+					Type.Boolean({ description: "Start a second instance instead of reusing one" }),
+				),
+				force: Type.Optional(
+					Type.Boolean({
+						description: "quit only: send SIGTERM instead of asking the app to quit",
+					}),
+				),
+			}),
+			execute: executeAppControl,
+		},
+		{
+			name: "run_script",
+			label: "Run Script",
+			description:
+				"Run AppleScript or JavaScript for Automation with osascript and return stdout, stderr, and exit code. This is the highest-leverage route for scriptable macOS applications (Finder, Mail, Music, Terminal, System Events) and for what the accessibility route cannot express; prefer it over pixel automation whenever a scripting dictionary exists. Automation access is granted per target application. macOS only.",
+			approval: "exec",
+			parameters: Type.Object({
+				source: Type.String({ description: "Script source, passed to osascript -e" }),
+				language: Type.Optional(
+					Type.Union(
+						[Type.Literal("applescript"), Type.Literal("javascript")],
+						{ description: "Default applescript; javascript selects JXA" },
+					),
+				),
+				timeoutMs: Type.Optional(
+					Type.Number({ description: "Default 30000" }),
+				),
+			}),
+			execute: executeRunScript,
+		},
+		{
+			name: "run_shortcut",
+			label: "Run Shortcut",
+			description:
+				"Run a shortcut from the user's Shortcuts library, optionally feeding input on stdin, or list the available shortcut names with action list. Shortcuts can perform arbitrary actions including shell scripts, so treat the result as code execution. macOS only.",
+			approval: "exec",
+			parameters: Type.Object({
+				action: Type.Optional(
+					Type.Union([Type.Literal("run"), Type.Literal("list")], {
+						description: "Default run",
+					}),
+				),
+				name: Type.Optional(
+					Type.String({ description: "Shortcut name; required unless action is list" }),
+				),
+				input: Type.Optional(
+					Type.String({ description: "Text passed to the shortcut on stdin" }),
+				),
+				timeoutMs: Type.Optional(
+					Type.Number({ description: "Default 60000" }),
+				),
+			}),
+			execute: executeRunShortcut,
 		},
 	];
 }

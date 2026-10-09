@@ -33,6 +33,9 @@ const EXPECTED_TOOLS = [
 	"launch_browser",
 	"navigate_browser",
 	"evaluate_browser",
+	"app_control",
+	"run_script",
+	"run_shortcut",
 	"run_code",
 ];
 
@@ -55,17 +58,6 @@ async function textEditPids() {
 		.split("\n")
 		.filter(Boolean)
 		.map((value) => Number(value));
-}
-
-/** Resolves the pid of the instance this test started, never the user's. */
-async function waitForNewPid(before, timeoutMs) {
-	const deadline = Date.now() + timeoutMs;
-	while (Date.now() < deadline) {
-		const fresh = (await textEditPids()).find((pid) => !before.includes(pid));
-		if (fresh !== undefined) return fresh;
-		await new Promise((resolve) => setTimeout(resolve, 300));
-	}
-	return undefined;
 }
 
 const client = new Client({ name: "cua-smoke", version: "0.1.0" }, { capabilities: {} });
@@ -188,6 +180,28 @@ try {
 		console.log("SKIP read_text positive path (no static text ref in the observed window)");
 	}
 
+	// --- system adapters -------------------------------------------------
+	const script = await call("run_script", { source: "return 6 * 7" });
+	check(
+		"run_script executes AppleScript and returns stdout",
+		!script.isError && script.details.stdout.trim() === "42",
+		JSON.stringify(script.details ?? script.text).slice(0, 160),
+	);
+	const failing = await call("run_script", { source: 'error "deliberate failure"' });
+	check(
+		"run_script reports a script error instead of swallowing it",
+		failing.isError && failing.details.exitCode !== 0,
+		JSON.stringify(failing.details ?? {}).slice(0, 160),
+	);
+	const shortcutList = await call("run_shortcut", { action: "list" });
+	check("run_shortcut lists the library", !shortcutList.isError, shortcutList.text.slice(0, 120));
+	const noSelector = await call("app_control", { action: "launch" });
+	check(
+		"app_control rejects a missing selector",
+		noSelector.isError,
+		noSelector.text.slice(0, 120),
+	);
+
 	// --- scripting -------------------------------------------------------
 	const scripted = await call("run_code", {
 		code: `
@@ -200,7 +214,7 @@ try {
 	const scriptedValue = scripted.details.value;
 	check(
 		"run_code dispatches back into the tool surface",
-		!scripted.isError && scriptedValue?.rootCount > 0 && scriptedValue?.tools === 12,
+		!scripted.isError && scriptedValue?.rootCount > 0 && scriptedValue?.tools === 15,
 		JSON.stringify(scriptedValue ?? scripted.text).slice(0, 160),
 	);
 	check(
@@ -225,32 +239,58 @@ try {
 				`SKIP live write path (TextEdit already running: pid ${existing.join(", ")})`,
 			);
 		} else {
-			await execFileAsync("open", ["-n", "-a", "TextEdit"]);
-			const ownPid = await waitForNewPid(existing, 15000);
+			const launch = await call("app_control", {
+				action: "launch",
+				bundleId: "com.apple.TextEdit",
+				newInstance: true,
+			});
+			const ownPid = launch.details?.pid;
+			check(
+				"app_control launches an app and reports its pid",
+				!launch.isError && Number.isInteger(ownPid),
+				JSON.stringify(launch.details ?? launch.text).slice(0, 160),
+			);
+
 			try {
-				if (!ownPid) throw new Error("scratch TextEdit instance did not start");
-				// Only this instance exists, so creating a document cannot touch
-				// the user's work.
-				await execFileAsync("osascript", [
-					"-e",
-					'tell application "TextEdit" to make new document',
-				]);
+				// This instance is the only TextEdit, so asking for a document
+				// cannot touch the user's work.
+				const created = await call("run_script", {
+					source: 'tell application "TextEdit" to make new document',
+				});
+				if (created.isError) {
+					console.log(
+						`NOTE run_script could not create a document: ${created.text.slice(0, 120)}`,
+					);
+				}
 
 				let target;
-				for (let attempt = 0; attempt < 20 && !target; attempt += 1) {
-					const liveRoots = await call("find_roots", { pid: ownPid });
-					target = (liveRoots.details.windows ?? []).find(
-						(candidate) => candidate.pid === ownPid,
+				let areaRef;
+				let scratchState;
+				for (let attempt = 0; attempt < 24 && !areaRef; attempt += 1) {
+					// Fall back to matching by app name: the reported pid is a
+					// convenience, and a cold launch may not resolve one in time.
+					const liveRoots = await call(
+						"find_roots",
+						Number.isInteger(ownPid) ? { pid: ownPid } : { app: "TextEdit" },
 					);
-					if (!target) await new Promise((resolve) => setTimeout(resolve, 500));
+					target = (liveRoots.details.windows ?? []).find((candidate) =>
+						Number.isInteger(ownPid)
+							? candidate.pid === ownPid
+							: /TextEdit/i.test(candidate.app ?? ""),
+					);
+					if (target) {
+						const scratch = await call("observe_ui", {
+							root: target.windowRef,
+							image: "never",
+						});
+						scratchState = scratch.details.capture?.stateId;
+						areaRef = /(@e\d+)\s+AX(TextArea|TextView)/.exec(
+							scratch.details.renderedOutline ?? "",
+						)?.[1];
+					}
+					if (!areaRef) await new Promise((resolve) => setTimeout(resolve, 500));
 				}
-				if (!target) throw new Error(`no root for scratch pid ${ownPid}`);
-
-				const scratch = await call("observe_ui", { root: target.windowRef, image: "never" });
-				const scratchState = scratch.details.capture?.stateId;
-				const areaRef = /(@e\d+)\s+AX(TextArea|TextView)/.exec(
-					scratch.details.renderedOutline ?? "",
-				)?.[1];
+				if (!target) throw new Error("no scratch TextEdit window appeared");
 				if (!areaRef) throw new Error("no AXTextArea in the scratch document");
 
 				const write = await call("act_ui", {
@@ -273,8 +313,21 @@ try {
 			} catch (error) {
 				check("live write path", false, error instanceof Error ? error.message : String(error));
 			} finally {
-				// Only the instance this test started.
-				if (ownPid) process.kill(ownPid, "SIGTERM");
+				// Close the scratch document first: a graceful quit would otherwise
+				// block on TextEdit's own unsaved-work prompt, which is the exact
+				// condition the stillRunning signal exists to expose.
+				await call("run_script", {
+					source: 'tell application "TextEdit" to close every document saving no',
+				}).catch(() => undefined);
+				const quit = await call("app_control", { action: "quit", app: "TextEdit" });
+				check(
+					"app_control quit reports a clean exit",
+					!quit.isError && quit.details?.stillRunning === false,
+					JSON.stringify(quit.details ?? quit.text).slice(0, 160),
+				);
+				if (quit.details?.stillRunning === true) {
+					await call("app_control", { action: "quit", app: "TextEdit", force: true });
+				}
 			}
 		}
 	} else {

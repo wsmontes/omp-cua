@@ -30,6 +30,9 @@ assert.deepEqual([...extension.tools.keys()], [
 	"launch_browser",
 	"navigate_browser",
 	"evaluate_browser",
+	"app_control",
+	"run_script",
+	"run_shortcut",
 ]);
 
 const approvals = Object.fromEntries([...extension.tools].map(([name, registration]) => [name, registration.definition.approval]));
@@ -45,6 +48,9 @@ assert.deepEqual(approvals, {
 	launch_browser: "write",
 	navigate_browser: "write",
 	evaluate_browser: "exec",
+	app_control: "write",
+	run_script: "exec",
+	run_shortcut: "exec",
 });
 
 const actSchema = extension.tools.get("act_ui").definition.parameters;
